@@ -101,7 +101,7 @@ server.post('/api/wardrobe/analyze', async (request, reply) => {
     try {
       analysis = await analyzeWardrobeItem(cloudinaryResponse.secure_url);
     } catch (e) {
-      server.log.error("AI Analysis failed", e);
+      server.log.error(e as Error, "AI Analysis failed");
     }
 
     return { success: true, data: { imageUrl: cloudinaryResponse.secure_url, analysis } };
