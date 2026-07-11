@@ -19,7 +19,7 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "drizzle-kit": "^0.31.10",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.31.2",
     "eslint": "^8.57.0",
     "tsx": "^4.7.1",
     "typescript": "^5.4.5"
