@@ -1,4 +1,4 @@
-import './env';
+import './env.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -8,7 +8,7 @@ import { db, occasions, outfitTemplates, wardrobeItems, wardrobeItemImages } fro
 import { eq, or } from 'drizzle-orm';
 import multipart from '@fastify/multipart';
 import { v2 as cloudinary } from 'cloudinary';
-import { analyzeWardrobeItem, generateOutfit } from './ai';
+import { analyzeWardrobeItem, generateOutfit } from './ai.js';
 import { generatedOutfits, generatedOutfitItems, outfitFavorites, wearHistory } from '@dianis/database';
 
 
