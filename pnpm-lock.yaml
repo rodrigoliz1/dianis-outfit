@@ -76,7 +76,7 @@ importers:
         specifier: ^4.7.1
         version: 4.23.0
       typescript:
-        specifier: ^5.3.3
+        specifier: ^5.4.5
         version: 5.9.2
 
   apps/web:
@@ -180,7 +180,7 @@ importers:
         specifier: ^4.7.1
         version: 4.23.0
       typescript:
-        specifier: ^5.3.3
+        specifier: ^5.4.5
         version: 5.9.2
 
   packages/eslint-config:
@@ -235,7 +235,7 @@ importers:
         specifier: ^8.57.0
         version: 8.57.1
       typescript:
-        specifier: ^5.3.3
+        specifier: ^5.4.5
         version: 5.9.2
 
   packages/typescript-config: {}
