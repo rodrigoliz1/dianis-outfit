@@ -127,11 +127,10 @@ server.post('/api/wardrobe', async (request, reply) => {
     const [newItem] = await db.insert(wardrobeItems).values({
       userId,
       name: body.name || 'Mi Prenda',
-      originalImageUrl: body.imageUrl,
       category: body.category || 'tops',
-      colorFamily: body.colorFamily || 'unknown',
+      primaryColor: body.colorFamily || 'unknown',
       weatherTags: body.weatherTags || [],
-      occasionTags: body.styleTags || []
+      styleTags: body.styleTags || []
     }).returning();
 
     return { success: true, data: newItem };
@@ -179,19 +178,17 @@ server.post('/api/outfits/generate', async (request, reply) => {
     // Save generated outfit to DB
     const [newOutfit] = await db.insert(generatedOutfits).values({
       userId,
+      sourceMode: 'curated',
       name: aiResult.name,
       description: aiResult.description,
-      occasionTag: body.occasion,
-      styleTag: body.style,
-      formalityScore: 3,
-      comfortScore: 3
+      score: 100
     }).returning();
 
     // Attach items
     const itemsToAttach = [];
-    if (aiResult.topId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.topId });
-    if (aiResult.bottomId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.bottomId });
-    if (aiResult.shoesId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.shoesId });
+    if (newOutfit && aiResult.topId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.topId });
+    if (newOutfit && aiResult.bottomId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.bottomId });
+    if (newOutfit && aiResult.shoesId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.shoesId });
     
     if (itemsToAttach.length > 0) {
       await db.insert(generatedOutfitItems).values(itemsToAttach);
@@ -209,7 +206,7 @@ server.get('/api/outfits/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     
     // Check if it's a template
-    const template = await db.select().from(outfitTemplates).where(eq(outfitTemplates.id, id)).or(eq(outfitTemplates.slug, id)).limit(1);
+    const template = await db.select().from(outfitTemplates).where(or(eq(outfitTemplates.id, id), eq(outfitTemplates.slug, id))).limit(1);
     
     if (template.length > 0) {
       return { success: true, data: template[0] };
