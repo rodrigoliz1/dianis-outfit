@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 46 100% 98%; /* ivory */
+    --foreground: 30 11% 12%; /* charcoal */
+
+    --card: 46 100% 98%;
+    --card-foreground: 30 11% 12%;
+
+    --popover: 46 100% 98%;
+    --popover-foreground: 30 11% 12%;
+
+    --primary: 40 47% 56%; /* soft-gold */
+    --primary-foreground: 46 100% 98%;
+
+    --secondary: 40 54% 81%; /* champagne */
+    --secondary-foreground: 30 11% 12%;
+
+    --muted: 40 33% 95%; /* warm-white */
+    --muted-foreground: 30 5% 44%; /* soft-gray */
+
+    --accent: 40 54% 81%;
+    --accent-foreground: 30 11% 12%;
+
+    --destructive: 0 38% 44%; /* error */
+    --destructive-foreground: 46 100% 98%;
+
+    --border: 37 38% 86%; /* border */
+    --input: 37 38% 86%;
+    --ring: 40 47% 56%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    /* Optional: Configure dark mode variables here if needed later */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}

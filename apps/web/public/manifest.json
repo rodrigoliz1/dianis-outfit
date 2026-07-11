@@ -1,0 +1,21 @@
+{
+  "name": "Dianis Outfit",
+  "short_name": "Dianis",
+  "description": "Tu estilista personal inteligente",
+  "start_url": "/welcome",
+  "display": "standalone",
+  "background_color": "#FCFBF8",
+  "theme_color": "#B89B5E",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

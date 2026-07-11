@@ -1,0 +1,20 @@
+{
+  "name": "DIANIS OUTFIT",
+  "private": true,
+  "scripts": {
+    "build": "npx pnpm exec turbo run build",
+    "dev": "npx pnpm exec turbo run dev",
+    "lint": "npx pnpm exec turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "check-types": "npx pnpm exec turbo run check-types"
+  },
+  "devDependencies": {
+    "prettier": "^3.7.4",
+    "turbo": "^2.10.4",
+    "typescript": "~5.2.2"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=18"
+  }
+}
