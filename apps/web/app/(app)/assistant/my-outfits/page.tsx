@@ -26,10 +26,13 @@ function WardrobeCollage({ items, imageUrl }: { items: CollageItem[]; imageUrl?:
       <Sparkles className="h-12 w-12 text-soft-gold/20" />
     </div>
   );
-  if (withImg.length === 1) return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={withImg[0].imageUrl!} alt="" className="absolute inset-0 w-full h-full object-cover" />
-  );
+  if (withImg.length === 1) {
+    const first = withImg[0]!;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={first.imageUrl!} alt="" className="absolute inset-0 w-full h-full object-cover" />
+    );
+  }
   return (
     <div className="absolute inset-0 grid grid-cols-2 gap-0.5 bg-white">
       {withImg.map((item, i) => (

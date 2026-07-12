@@ -19,7 +19,10 @@ type MyOutfit = {
 function SmallCollage({ items }: { items: { imageUrl: string | null }[] }) {
   const withImg = items.filter(i => i.imageUrl).slice(0, 4);
   if (withImg.length === 0) return <div className="w-full h-full bg-ivory flex items-center justify-center"><Sparkles className="h-6 w-6 text-soft-gold/30" /></div>;
-  if (withImg.length === 1) return <img src={withImg[0].imageUrl!} alt="" className="w-full h-full object-cover" />;
+  if (withImg.length === 1) {
+    const first = withImg[0]!;
+    return <img src={first.imageUrl!} alt="" className="w-full h-full object-cover" />;
+  }
   return (
     <div className="w-full h-full grid grid-cols-2 gap-0.5 bg-white">
       {withImg.map((item, i) => (
