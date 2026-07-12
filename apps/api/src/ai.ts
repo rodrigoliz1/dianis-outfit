@@ -99,19 +99,29 @@ export async function generateOutfitImage(
   description: string,
   colorPalette: string[],
   styleTags: string[],
-  occasionTags: string[]
+  occasionTags: string[],
+  userGender?: string | null,
+  userAvatarUrl?: string | null
 ): Promise<string | null> {
   try {
     const colors = colorPalette?.slice(0, 4).join(", ") || "neutros elegantes";
     const styles = styleTags?.slice(0, 3).join(", ") || "moderno";
     const occasion = occasionTags?.slice(0, 2).join(" y ") || "ocasión especial";
 
-    const prompt = `High-quality fashion editorial photograph of a complete women's outfit styled for ${occasion}.
+    let prompt = "";
+    if (userGender) {
+      const genderStr = userGender.toLowerCase() === "masculino" ? "man" : userGender.toLowerCase() === "femenino" ? "woman" : "person";
+      prompt = `High-quality fashion editorial photograph of a realistic ${genderStr} modeling a complete outfit for ${occasion}.
+Style: ${styles}. Color palette: ${colors}.
+Outfit concept: "${outfitName}" — ${description}
+The model should be posing naturally against a clean studio background or aesthetic street setting. Fashion magazine quality, professional lighting.`;
+    } else {
+      prompt = `High-quality fashion editorial photograph of a complete outfit styled for ${occasion}.
 Style: ${styles}. Color palette: ${colors}.
 Outfit concept: "${outfitName}" — ${description}
 The photo should show the full outfit displayed in a flatlay or on a mannequin against a clean white or soft cream background.
-Fashion magazine quality, professional studio lighting, elegant composition. No faces, no people — only the clothing arranged beautifully.
-The outfit pieces should be visually harmonious and match the described aesthetic perfectly.`;
+Fashion magazine quality, professional studio lighting, elegant composition. No faces, no people — only the clothing arranged beautifully.`;
+    }
 
     const imageResponse = await openai.images.generate({
       model: "dall-e-2",

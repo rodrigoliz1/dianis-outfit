@@ -16,6 +16,8 @@ export const users = pgTable('users', {
 export const userProfiles = pgTable('user_profiles', {
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).primaryKey(),
   preferredName: text('preferred_name'),
+  gender: text('gender'), // 'masculino', 'femenino', 'otro', etc.
+  avatarUrl: text('avatar_url'), // Cloudinary URL for realistic avatar
   onboardingCompleted: boolean('onboarding_completed').default(false).notNull(),
   favoriteColors: text('favorite_colors').array(),
   avoidedColors: text('avoided_colors').array(),

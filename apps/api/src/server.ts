@@ -252,13 +252,27 @@ async function generateWardrobeOutfits(userId: string, newItemId: string): Promi
         const selectedItems = allItems.filter(i => selectedIds.includes(i.id));
         const colorPalette = [...new Set(selectedItems.map(i => i.primaryColor).filter(Boolean))];
 
+        // Fetch user profile for personalization
+        let userGender = null;
+        let userAvatar = null;
+        try {
+          const userRec = await db.select().from(users).where(eq(users.externalAuthId, userId)).limit(1).then(res => res[0]);
+          if (userRec) {
+            const profile = await db.select().from(userProfiles).where(eq(userProfiles.userId, userRec.id)).limit(1).then(res => res[0]);
+            userGender = profile?.gender;
+            userAvatar = profile?.avatarUrl;
+          }
+        } catch(e) { server.log.error(e); }
+
         // Fire and forget image generation so it doesn't block UI
         generateOutfitImage(
           savedOutfit.name || `Outfit ${occasion}`,
           savedOutfit.description || savedOutfit.name || '',
           colorPalette as string[],
           [occasion],
-          [occasion]
+          [],
+          userGender,
+          userAvatar
         ).then(async (imageUrl) => {
           if (imageUrl) {
             await db.update(generatedOutfits)
@@ -646,6 +660,71 @@ server.get('/api/favorites', async (request, reply) => {
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to fetch favorites' });
+  }
+});
+
+server.get('/api/profile', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+
+    let user = await db.select().from(users).where(eq(users.externalAuthId, userId)).limit(1).then(res => res[0]);
+    if (!user) {
+      const [newUser] = await db.insert(users).values({ externalAuthId: userId, email: userId + '@placeholder.com' }).returning();
+      user = newUser;
+    }
+    
+    let profile = await db.select().from(userProfiles).where(eq(userProfiles.userId, user.id)).limit(1).then(res => res[0]);
+    if (!profile) {
+      const [newProfile] = await db.insert(userProfiles).values({ userId: user.id }).returning();
+      profile = newProfile;
+    }
+
+    return { success: true, data: profile };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to fetch profile' });
+  }
+});
+
+server.put('/api/profile', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+
+    const body = request.body as { gender?: string, avatarUrl?: string };
+
+    let user = await db.select().from(users).where(eq(users.externalAuthId, userId)).limit(1).then(res => res[0]);
+    if (!user) {
+      const [newUser] = await db.insert(users).values({ externalAuthId: userId, email: userId + '@placeholder.com' }).returning();
+      user = newUser;
+    }
+
+    let finalAvatarUrl = body.avatarUrl;
+    if (body.avatarUrl && body.avatarUrl.startsWith('data:image')) {
+      const uploadRes = await cloudinary.uploader.upload(body.avatarUrl, {
+        folder: 'dianis_avatars',
+        resource_type: 'image'
+      });
+      finalAvatarUrl = uploadRes.secure_url;
+    }
+
+    const [updatedProfile] = await db.insert(userProfiles).values({
+      userId: user.id,
+      gender: body.gender,
+      avatarUrl: finalAvatarUrl
+    }).onConflictDoUpdate({
+      target: userProfiles.userId,
+      set: { 
+        gender: body.gender !== undefined ? body.gender : sql`gender`,
+        avatarUrl: finalAvatarUrl !== undefined ? finalAvatarUrl : sql`avatar_url`
+      }
+    }).returning();
+
+    return { success: true, data: updatedProfile };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to update profile' });
   }
 });
 
