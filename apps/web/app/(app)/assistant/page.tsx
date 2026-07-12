@@ -66,7 +66,7 @@ export default function AssistantPage() {
       {/* Main action cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <Card className="cursor-pointer hover:border-soft-gold hover:shadow-md transition-all h-full" onClick={() => router.push('/assistant/results')}>
+          <Card className="cursor-pointer hover:border-soft-gold hover:shadow-md transition-all h-full" onClick={() => router.push('/assistant/all-outfits')}>
             <CardContent className="flex flex-col items-center justify-center p-8 space-y-4 text-center h-full">
               <div className="w-16 h-16 rounded-full bg-champagne/30 flex items-center justify-center mb-2">
                 <Sparkles className="w-8 h-8 text-deep-gold" />
