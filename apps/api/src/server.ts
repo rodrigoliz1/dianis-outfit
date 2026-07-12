@@ -11,6 +11,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import { analyzeWardrobeItem, generateOutfit, generateOutfitImage } from './ai.js';
 import { generatedOutfits, generatedOutfitItems, outfitFavorites, wearHistory } from '@dianis/database';
 
+// In-memory lock: tracks which outfit IDs are currently having an image generated
+// Prevents duplicate DALL-E calls when multiple users open the same imageless outfit simultaneously
+const imageGeneratingLock = new Set<string>();
 
 
 const server = Fastify({
@@ -198,6 +201,10 @@ server.get('/api/wardrobe', async (request, reply) => {
 });
 
 server.post('/api/outfits/generate', async (request, reply) => {
+  // NOTE: Each call creates a new generatedOutfit entry in DB.
+  // Wardrobe outfits are user-specific combinations — no two calls produce identical results,
+  // so we do NOT cache at the route level. Caching is done by saving the result in generatedOutfits
+  // table and serving from there when the user revisits via /api/outfits/:id.
   try {
     const { userId } = getAuth(request);
     if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
@@ -272,8 +279,9 @@ server.get('/api/outfits/:id', async (request, reply) => {
     const bySlug = await db.select().from(outfitTemplates).where(eq(outfitTemplates.slug, id)).limit(1);
     if (bySlug.length > 0) {
       const outfit = bySlug[0];
-      // Auto-generate image if missing (async, non-blocking — return immediately and generate in background)
-      if (!outfit.imageUrl) {
+      // Auto-generate image if missing — lock prevents duplicate DALL-E calls
+      if (!outfit.imageUrl && !imageGeneratingLock.has(outfit.id)) {
+        imageGeneratingLock.add(outfit.id);
         generateOutfitImage(
           outfit.name,
           outfit.description || outfit.name,
@@ -286,7 +294,8 @@ server.get('/api/outfits/:id', async (request, reply) => {
               .set({ imageUrl })
               .where(eq(outfitTemplates.id, outfit.id));
           }
-        }).catch((e) => server.log.error(e, 'Failed to generate outfit image'));
+        }).catch((e) => server.log.error(e, 'Failed to generate outfit image'))
+          .finally(() => imageGeneratingLock.delete(outfit.id));
       }
       return { success: true, data: outfit };
     }
@@ -296,7 +305,8 @@ server.get('/api/outfits/:id', async (request, reply) => {
       const byId = await db.select().from(outfitTemplates).where(eq(outfitTemplates.id, id)).limit(1);
       if (byId.length > 0) {
         const outfit = byId[0];
-        if (!outfit.imageUrl) {
+        if (!outfit.imageUrl && !imageGeneratingLock.has(outfit.id)) {
+          imageGeneratingLock.add(outfit.id);
           generateOutfitImage(
             outfit.name,
             outfit.description || outfit.name,
@@ -309,7 +319,8 @@ server.get('/api/outfits/:id', async (request, reply) => {
                 .set({ imageUrl })
                 .where(eq(outfitTemplates.id, outfit.id));
             }
-          }).catch((e) => server.log.error(e, 'Failed to generate outfit image'));
+          }).catch((e) => server.log.error(e, 'Failed to generate outfit image'))
+            .finally(() => imageGeneratingLock.delete(outfit.id));
         }
         return { success: true, data: outfit };
       }
@@ -328,30 +339,56 @@ server.get('/api/outfits/:id', async (request, reply) => {
   }
 });
 
-// Endpoint to get all catalog outfits — also generates images for ones that don't have them
-server.get('/api/outfits/generate-images', async (request, reply) => {
+// Admin endpoint: pre-generate ALL missing catalog outfit images in sequential batches
+// Protected by secret key. Call once after seeding the catalog.
+// Sequential (not parallel) to respect DALL-E rate limits.
+server.get('/api/admin/generate-catalog-images', async (request, reply) => {
+  const { secret } = request.query as { secret?: string };
+  const adminSecret = process.env.ADMIN_SECRET || 'dianis-admin-2024';
+  if (secret !== adminSecret) {
+    return reply.status(401).send({ success: false, error: 'Unauthorized' });
+  }
+
   try {
     const outfits = await db.select().from(outfitTemplates).where(eq(outfitTemplates.isActive, true));
-    const missing = outfits.filter(o => !o.imageUrl);
+    const missing = outfits.filter(o => !o.imageUrl && !imageGeneratingLock.has(o.id));
     
-    // Kick off generation for up to 3 at once (rate limit friendly)
-    const batch = missing.slice(0, 3);
-    await Promise.all(batch.map(async (outfit) => {
-      const imageUrl = await generateOutfitImage(
-        outfit.name,
-        outfit.description || outfit.name,
-        outfit.colorPalette || [],
-        outfit.styleTags || [],
-        outfit.occasionTags || []
-      );
-      if (imageUrl) {
-        await db.update(outfitTemplates)
-          .set({ imageUrl })
-          .where(eq(outfitTemplates.id, outfit.id));
-      }
-    }));
+    server.log.info(`Starting bulk image generation for ${missing.length} outfits`);
+    let generated = 0;
+    let failed = 0;
 
-    return { success: true, generated: batch.length, remaining: missing.length - batch.length };
+    // Sequential to avoid DALL-E rate limits (1 image ~15s, limit: ~5/min)
+    for (const outfit of missing) {
+      if (imageGeneratingLock.has(outfit.id)) continue;
+      imageGeneratingLock.add(outfit.id);
+      try {
+        const imageUrl = await generateOutfitImage(
+          outfit.name,
+          outfit.description || outfit.name,
+          outfit.colorPalette || [],
+          outfit.styleTags || [],
+          outfit.occasionTags || []
+        );
+        if (imageUrl) {
+          await db.update(outfitTemplates)
+            .set({ imageUrl })
+            .where(eq(outfitTemplates.id, outfit.id));
+          generated++;
+          server.log.info(`Generated image for: ${outfit.slug}`);
+        } else {
+          failed++;
+        }
+      } catch (e) {
+        failed++;
+        server.log.error(e, `Failed for outfit: ${outfit.slug}`);
+      } finally {
+        imageGeneratingLock.delete(outfit.id);
+      }
+      // Small delay between calls to respect rate limits
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    return { success: true, generated, failed, total: missing.length };
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to generate images' });
