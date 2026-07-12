@@ -153,9 +153,11 @@ server.post('/api/wardrobe', async (request, reply) => {
       userId,
       name: body.name || 'Mi Prenda',
       category: body.category || 'tops',
+      subcategory: body.subcategory || null,
       primaryColor: body.colorFamily || 'unknown',
       weatherTags: body.weatherTags || [],
-      styleTags: body.styleTags || []
+      styleTags: body.styleTags || [],
+      formalityScore: body.formalityScore || null,
     }).returning();
 
     // Save image record
@@ -168,12 +170,97 @@ server.post('/api/wardrobe', async (request, reply) => {
       });
     }
 
+    // ─── Silently generate wardrobe outfit combos in background ───
+    // This runs async — user gets response immediately
+    if (newItem) {
+      const newItemId = newItem.id;
+      generateWardrobeOutfits(userId, newItemId).catch(e =>
+        server.log.error(e, 'Background outfit generation failed')
+      );
+    }
+
     return { success: true, data: { ...newItem, imageUrl: body.imageUrl } };
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to save item' });
   }
 });
+
+/**
+ * Silently generates outfit combinations for a user after they add a new wardrobe item.
+ * Fetches all their items, asks AI for best combo, generates a DALL-E image, saves permanently.
+ */
+async function generateWardrobeOutfits(userId: string, newItemId: string): Promise<void> {
+  try {
+    // Get all user items with images
+    const allItemsRaw = await db.select().from(wardrobeItems).where(eq(wardrobeItems.userId, userId));
+    if (allItemsRaw.length < 2) return; // Need at least 2 items to make an outfit
+
+    const allItems = await Promise.all(allItemsRaw.map(async (item) => {
+      const imgs = await db.select().from(wardrobeItemImages)
+        .where(eq(wardrobeItemImages.wardrobeItemId, item.id)).limit(1);
+      return { ...item, imageUrl: imgs[0]?.secureUrl || null };
+    }));
+
+    // Generate up to 3 outfit suggestions (casual, elegant, professional)
+    const occasions = ['casual', 'elegante', 'profesional'];
+    for (const occasion of occasions) {
+      try {
+        const aiResult = await generateOutfit(allItems, occasion, occasion);
+        if (!aiResult) continue;
+
+        // Save the generated outfit
+        const [savedOutfit] = await db.insert(generatedOutfits).values({
+          userId,
+          sourceMode: 'wardrobe',
+          name: aiResult.name || `Outfit ${occasion}`,
+          description: aiResult.description || '',
+          score: 90,
+        }).returning();
+
+        if (!savedOutfit) continue;
+
+        // Attach items
+        const itemsToAttach: any[] = [];
+        if (aiResult.topId) itemsToAttach.push({ generatedOutfitId: savedOutfit.id, wardrobeItemId: aiResult.topId, role: 'top' });
+        if (aiResult.bottomId) itemsToAttach.push({ generatedOutfitId: savedOutfit.id, wardrobeItemId: aiResult.bottomId, role: 'bottom' });
+        if (aiResult.shoesId) itemsToAttach.push({ generatedOutfitId: savedOutfit.id, wardrobeItemId: aiResult.shoesId, role: 'shoes' });
+        if (aiResult.outerwearId) itemsToAttach.push({ generatedOutfitId: savedOutfit.id, wardrobeItemId: aiResult.outerwearId, role: 'outerwear' });
+        if (aiResult.accessoryId) itemsToAttach.push({ generatedOutfitId: savedOutfit.id, wardrobeItemId: aiResult.accessoryId, role: 'accessory' });
+
+        if (itemsToAttach.length > 0) {
+          await db.insert(generatedOutfitItems).values(itemsToAttach);
+        }
+
+        // Generate DALL-E image for the combo
+        const selectedIds = itemsToAttach.map((i: any) => i.wardrobeItemId);
+        const selectedItems = allItems.filter(i => selectedIds.includes(i.id));
+        const colorPalette = [...new Set(selectedItems.map(i => i.primaryColor).filter(Boolean))];
+
+        const imageUrl = await generateOutfitImage(
+          savedOutfit.name || `Outfit ${occasion}`,
+          savedOutfit.description || savedOutfit.name || '',
+          colorPalette as string[],
+          [occasion],
+          [occasion]
+        );
+
+        if (imageUrl) {
+          await db.update(generatedOutfits)
+            .set({ imageUrl } as any)
+            .where(eq(generatedOutfits.id, savedOutfit.id));
+        }
+
+        // Wait 15s between DALL-E calls to respect rate limits
+        await new Promise(r => setTimeout(r, 15000));
+      } catch (e) {
+        server.log.error(e, `Failed to generate outfit for occasion: ${occasion}`);
+      }
+    }
+  } catch (e) {
+    server.log.error(e, 'generateWardrobeOutfits failed');
+  }
+}
 
 server.get('/api/wardrobe', async (request, reply) => {
   try {
@@ -197,6 +284,74 @@ server.get('/api/wardrobe', async (request, reply) => {
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to fetch wardrobe' });
+  }
+});
+
+// Get all wardrobe-generated outfits for the logged-in user (pre-generated, with images + pieces)
+server.get('/api/my-outfits', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+
+    const myOutfits = await db.select().from(generatedOutfits)
+      .where(eq(generatedOutfits.userId, userId))
+      .orderBy(generatedOutfits.createdAt);
+
+    // For each outfit, get its items with images
+    const outfitsWithItems = await Promise.all(myOutfits.map(async (outfit) => {
+      const items = await db.select({
+        id: generatedOutfitItems.id,
+        wardrobeItemId: generatedOutfitItems.wardrobeItemId,
+        role: generatedOutfitItems.role,
+      }).from(generatedOutfitItems)
+        .where(eq(generatedOutfitItems.generatedOutfitId, outfit.id));
+
+      const itemsWithImages = await Promise.all(items.map(async (item) => {
+        if (!item.wardrobeItemId) return null;
+        const [wItem] = await db.select().from(wardrobeItems)
+          .where(eq(wardrobeItems.id, item.wardrobeItemId)).limit(1);
+        const [img] = await db.select().from(wardrobeItemImages)
+          .where(eq(wardrobeItemImages.wardrobeItemId, item.wardrobeItemId)).limit(1);
+        return wItem ? { ...wItem, imageUrl: img?.secureUrl || null, role: item.role } : null;
+      }));
+
+      return {
+        ...outfit,
+        collageItems: itemsWithImages.filter(Boolean),
+      };
+    }));
+
+    return { success: true, data: outfitsWithItems };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to fetch your outfits' });
+  }
+});
+
+// Combined "all outfits" view: catalog templates + user's generated outfits
+server.get('/api/all-outfits', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+
+    // Catalog outfits (public)
+    const catalog = await db.select().from(outfitTemplates).where(eq(outfitTemplates.isActive, true));
+
+    // User's generated outfits (if logged in)
+    let generated: any[] = [];
+    if (userId) {
+      generated = await db.select().from(generatedOutfits)
+        .where(eq(generatedOutfits.userId, userId));
+    }
+
+    const allOutfits = [
+      ...catalog.map(o => ({ ...o, source: 'catalog' as const })),
+      ...generated.map(o => ({ ...o, source: 'wardrobe' as const })),
+    ];
+
+    return { success: true, data: allOutfits };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to fetch outfits' });
   }
 });
 

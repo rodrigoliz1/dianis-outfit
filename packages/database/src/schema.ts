@@ -169,6 +169,7 @@ export const generatedOutfits = pgTable('generated_outfits', {
   category: text('category'), // From chosen style category
   name: text('name'),
   description: text('description'),
+  imageUrl: text('image_url'), // DALL-E generated image URL (permanent)
   score: real('score'), // Match score
   scoreBreakdown: jsonb('score_breakdown'),
   explanation: text('explanation'), // AI explanation
