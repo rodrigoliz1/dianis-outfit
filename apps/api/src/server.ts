@@ -225,6 +225,24 @@ server.delete<{ Params: { id: string } }>('/api/wardrobe/:id', async (request, r
   }
 });
 
+server.get<{ Params: { id: string } }>('/api/wardrobe/:id', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+
+    const { id } = request.params;
+    const [item] = await db.select().from(wardrobeItems).where(eq(wardrobeItems.id, id)).limit(1);
+    if (!item || item.userId !== userId) {
+      return reply.status(404).send({ success: false, error: 'Item not found' });
+    }
+    const imgs = await db.select().from(wardrobeItemImages).where(eq(wardrobeItemImages.wardrobeItemId, id)).limit(1);
+    return { success: true, data: { ...item, imageUrl: imgs[0]?.secureUrl || null } };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to fetch item' });
+  }
+});
+
 server.put<{ Params: { id: string }, Body: { name?: string, category?: string, subcategory?: string, primaryColor?: string } }>('/api/wardrobe/:id', async (request, reply) => {
   try {
     const { userId } = getAuth(request);

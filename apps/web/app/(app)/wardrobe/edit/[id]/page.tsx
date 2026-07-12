@@ -31,24 +31,22 @@ export default function EditWardrobeItemPage({ params }: { params: { id: string 
         const token = await getToken();
         if (!token) return;
         
-        const res = await fetch("/api/wardrobe", {
+        const res = await fetch(`/api/wardrobe/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
-        if (data.success) {
-          const item = data.data.find((i: any) => i.id === id);
-          if (item) {
-            setFormData({
-              name: item.name || "",
-              category: item.category || "",
-              subcategory: item.subcategory || "",
-              primaryColor: item.primaryColor || "",
-            });
-            setImageUrl(item.imageUrl || null);
-          } else {
-            alert("Prenda no encontrada");
-            router.push("/wardrobe");
-          }
+        if (data.success && data.data) {
+          const item = data.data;
+          setFormData({
+            name: item.name || "",
+            category: item.category || "",
+            subcategory: item.subcategory || "",
+            primaryColor: item.primaryColor || "",
+          });
+          setImageUrl(item.imageUrl || null);
+        } else {
+          alert("Prenda no encontrada");
+          router.push("/wardrobe");
         }
       } catch (err) {
         console.error(err);

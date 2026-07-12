@@ -1,108 +1,138 @@
-/**
- * generate-catalog-images.ts
- * Run locally to generate DALL-E 3 images for all catalog outfits and save to DB.
- * Usage: npx tsx packages/database/generate-catalog-images.ts
- */
+import { neon } from '@neondatabase/serverless';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
+import * as https from 'https';
+import * as fs from 'fs';
 
-// Load .env from monorepo root
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
-
-import OpenAI from 'openai';
-import { v2 as cloudinary } from 'cloudinary';
-import { neon } from '@neondatabase/serverless';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
 const sql = neon(process.env.DATABASE_URL!);
+const FAL_KEY = process.env.FAL_KEY!;
+const CLOUDINARY_URL = process.env.CLOUDINARY_URL;
 
-async function generateImage(outfit: any): Promise<string | null> {
-  const colors = (outfit.color_palette || []).slice(0, 4).join(', ') || 'colores neutros';
-  const styles = (outfit.style_tags || []).slice(0, 3).join(', ') || 'moderno';
-  const occasion = (outfit.occasion_tags || []).slice(0, 2).join(' y ') || 'ocasión';
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-  const prompt = `Professional fashion editorial flatlay photograph of a complete women's outfit for ${occasion}.
-Style: ${styles}. Color palette: ${colors}.
-Outfit: "${outfit.name}" — ${outfit.description}
-Show the complete outfit arranged beautifully on a clean white background, like a luxury fashion magazine.
-Include all clothing pieces (top, bottom or dress, shoes, bag if applicable) laid out neatly.
-No people, no mannequin. Just the clothing pieces arranged in a flatlay style.
-Ultra high quality, professional studio lighting, sharp details.`;
+async function uploadToCloudinary(imageUrl: string, slug: string): Promise<string | null> {
+  try {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    
+    if (!cloudName || !apiKey || !apiSecret) {
+      console.log('  ⚠️  Cloudinary not configured, using fal.ai URL directly');
+      return imageUrl;
+    }
+
+    const { v2: cloudinary } = await import('cloudinary');
+    cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret });
+    
+    const result = await cloudinary.uploader.upload(imageUrl, {
+      folder: 'dianis-outfit/catalog',
+      public_id: `catalog-${slug}`,
+      overwrite: true,
+      transformation: [{ quality: 'auto:good', fetch_format: 'auto' }]
+    });
+    return result.secure_url;
+  } catch (e: any) {
+    console.error('  Cloudinary upload error:', e.message);
+    return imageUrl; // Fall back to fal.ai URL
+  }
+}
+
+async function generateImageWithFal(prompt: string): Promise<string | null> {
+  if (!FAL_KEY) {
+    console.log('  ❌ FAL_KEY not set');
+    return null;
+  }
 
   try {
-    const res = await openai.images.generate({
-      model: 'dall-e-2',
-      prompt: prompt.substring(0, 950), // dall-e-2 has 1000 char limit
-      n: 1,
-      size: '1024x1024',
+    const res = await fetch('https://fal.run/fal-ai/flux/schnell', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        prompt: prompt.substring(0, 950),
+        image_size: 'square_hd',
+        num_inference_steps: 4
+      })
     });
 
-    const dalleUrl = res.data?.[0]?.url;
-    if (!dalleUrl) return null;
+    const text = await res.text();
+    if (!res.ok) {
+      console.error('  ❌ Fal.ai error:', text);
+      return null;
+    }
 
-    // Upload to Cloudinary for permanent storage
-    const upload = await cloudinary.uploader.upload(dalleUrl, {
-      folder: 'dianis-outfit/outfits/catalog',
-      public_id: `outfit-${outfit.slug}`,
-      overwrite: true,
-      transformation: [{ quality: 'auto:good', fetch_format: 'auto' }],
-    });
-
-    return upload.secure_url;
+    const data = JSON.parse(text);
+    return data.images?.[0]?.url || null;
   } catch (e: any) {
-    console.error(`  ❌ Error: ${e?.message}`);
+    console.error('  ❌ Fal.ai exception:', e.message);
     return null;
   }
 }
 
 async function main() {
-  console.log('🎨 Generating catalog outfit images with DALL-E 3...\n');
+  console.log('🎨 Pre-generating catalog outfit images with fal.ai...\n');
 
-  const outfits = await sql`
-    SELECT id, slug, name, description, image_url, color_palette, style_tags, occasion_tags 
-    FROM outfit_templates 
-    WHERE is_active = true 
+  const templates = await sql`
+    SELECT id, slug, name, description, occasion_tags, style_tags, color_palette, gender
+    FROM outfit_templates
+    WHERE image_url IS NULL OR image_url LIKE '%unsplash%'
     ORDER BY name
   ` as any[];
 
-  const missing = outfits.filter((o: any) => !o.image_url);
-  console.log(`Total outfits: ${outfits.length} | Missing images: ${missing.length}\n`);
+  console.log(`Found ${templates.length} outfits needing real AI-generated images.\n`);
+
+  if (templates.length === 0) {
+    console.log('✅ All outfits already have AI-generated images!');
+    return;
+  }
 
   let generated = 0;
   let failed = 0;
 
-  for (let i = 0; i < missing.length; i++) {
-    const outfit = missing[i];
-    console.log(`[${i + 1}/${missing.length}] Generating: "${outfit.name}" (${outfit.slug})...`);
+  for (let i = 0; i < templates.length; i++) {
+    const t = templates[i];
+    console.log(`[${i + 1}/${templates.length}] Generating: "${t.name}" (${t.slug})...`);
 
-    const imageUrl = await generateImage(outfit);
+    const colors = Array.isArray(t.color_palette) ? t.color_palette.slice(0, 3).join(', ') : 'neutros elegantes';
+    const styles = Array.isArray(t.style_tags) ? t.style_tags.slice(0, 2).join(', ') : 'moderno';
+    const occasion = Array.isArray(t.occasion_tags) ? t.occasion_tags.slice(0, 2).join(' y ') : 'ocasión especial';
+    const genderStr = t.gender === 'masculino' ? 'man' : 'woman';
 
-    if (imageUrl) {
-      await sql`UPDATE outfit_templates SET image_url = ${imageUrl} WHERE id = ${outfit.id}`;
-      console.log(`  ✅ Saved: ${imageUrl.substring(0, 80)}...`);
+    const prompt = `High-quality fashion editorial photograph of a stylish ${genderStr} wearing a complete outfit. Occasion: ${occasion}. Style: ${styles}. Colors: ${colors}. The outfit is called "${t.name}". Professional fashion photography, clean studio or lifestyle background, natural pose, magazine quality lighting.`;
+
+    const falUrl = await generateImageWithFal(prompt);
+    if (!falUrl) {
+      console.log('  ⚠️  Failed to generate, skipping...');
+      failed++;
+      await sleep(2000);
+      continue;
+    }
+
+    console.log('  ✅ Generated! Uploading to Cloudinary...');
+    const finalUrl = await uploadToCloudinary(falUrl, t.slug);
+    
+    if (finalUrl) {
+      await sql`UPDATE outfit_templates SET image_url = ${finalUrl} WHERE id = ${t.id}`;
+      console.log(`  💾 Saved: ${finalUrl.substring(0, 70)}...`);
       generated++;
     } else {
-      console.log(`  ⚠️  Skipped (no URL returned)`);
       failed++;
     }
 
-    // Rate limit: DALL-E allows ~5 images/min on standard tier
-    if (i < missing.length - 1) {
-      console.log(`  ⏳ Waiting 13s to respect rate limits...`);
-      await new Promise(r => setTimeout(r, 13000));
+    // Rate limit: 1 request every 3s for fal.ai free tier
+    if (i < templates.length - 1) {
+      console.log('  ⏳ Waiting 3s...');
+      await sleep(3000);
     }
   }
 
-  console.log(`\n✅ Done! Generated: ${generated} | Failed: ${failed} | Total: ${missing.length}`);
+  console.log(`\n✅ Done! Generated: ${generated} | Failed: ${failed} | Total: ${templates.length}`);
 }
 
 main().catch(console.error);
