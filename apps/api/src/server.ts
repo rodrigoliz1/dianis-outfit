@@ -22,14 +22,18 @@ const server = Fastify({
 });
 
 server.register(cors, {
-  origin: true // Configured later based on ENV
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 });
 
 server.register(helmet);
 
 server.register(multipart, {
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 20 * 1024 * 1024, // 20MB limit for iPhone camera photos
+    fieldSize: 20 * 1024 * 1024,
   }
 });
 

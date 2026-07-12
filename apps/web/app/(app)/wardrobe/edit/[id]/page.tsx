@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Tag, Palette } from "lucide-react";
+import { useRouter, useParams } from "next/navigation";
+import { ArrowLeft, Loader2, Tag, Palette, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@clerk/nextjs";
 
-export default function EditWardrobeItemPage({ params }: { params: { id: string } }) {
+export default function EditWardrobeItemPage() {
   const router = useRouter();
+  const params = useParams();
   const { getToken } = useAuth();
-  const id = params.id;
+  const id = params.id as string;
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
