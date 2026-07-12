@@ -142,7 +142,6 @@ export default function ProfilePage() {
                   <option value="">No especificado</option>
                   <option value="femenino">Femenino (Mujer)</option>
                   <option value="masculino">Masculino (Hombre)</option>
-                  <option value="no binario">No Binario / Neutro</option>
                 </select>
               </div>
               

@@ -148,7 +148,7 @@ export default function OutfitDetailPage() {
             <div className="w-14 h-14 rounded-full border-2 border-soft-gold/30 border-t-soft-gold animate-spin" />
             <div>
               <p className="font-serif text-lg text-charcoal mb-1">Creando imagen con IA</p>
-              <p className="text-sm text-soft-gray">DALL-E está generando una foto estilizada del outfit...</p>
+              <p className="text-sm text-soft-gray">Generando la imagen del outfit...</p>
             </div>
           </div>
         ) : (

@@ -24,7 +24,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="es">
-        <body className={`${inter.variable} ${playfair.variable} font-sans`}>
+        <body className={`${inter.variable} ${playfair.variable} font-sans overflow-x-hidden w-full`}>
           {children}
         </body>
       </html>
