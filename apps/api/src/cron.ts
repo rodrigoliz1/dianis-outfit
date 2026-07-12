@@ -66,7 +66,7 @@ Devuelve ÚNICAMENTE un JSON válido con esta estructura:
     );
 
     // 4. Update the DB with the image URL
-    if (imageUrl) {
+    if (imageUrl && inserted) {
       await db.update(outfitTemplates)
         .set({ imageUrl })
         .where({ id: inserted.id } as any);
