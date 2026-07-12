@@ -102,7 +102,7 @@ export default function WardrobePage() {
           {items.map((item, i) => (
             <motion.div key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}>
               <Card className="overflow-hidden h-full group relative">
-                <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
+                <div className="absolute top-2 right-2 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex space-x-1">
                   <Button size="icon" variant="destructive" className="h-7 w-7 rounded-full shadow" onClick={() => handleDelete(item.id)} disabled={deletingId === item.id}>
                     {deletingId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                   </Button>

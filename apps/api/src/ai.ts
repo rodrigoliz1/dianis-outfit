@@ -123,6 +123,9 @@ The photo should show the full outfit displayed in a flatlay or on a mannequin a
 Fashion magazine quality, professional studio lighting, elegant composition. No faces, no people — only the clothing arranged beautifully.`;
     }
 
+    // DALL-E API is disabled due to missing credits (Tier 0). Returning static image.
+    // Uncomment the below code to re-enable DALL-E generation.
+    /*
     const imageResponse = await openai.images.generate({
       model: "dall-e-2",
       prompt: prompt.substring(0, 950), // limit for dall-e-2
@@ -140,9 +143,12 @@ Fashion magazine quality, professional studio lighting, elegant composition. No 
     });
 
     return uploadResult.secure_url;
+    */
+
+    return "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=800&auto=format&fit=crop";
   } catch (error) {
     console.error("Error generating outfit image with DALL-E:", error);
-    return null;
+    return "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=800&auto=format&fit=crop";
   }
 }
 

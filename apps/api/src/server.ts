@@ -5,7 +5,7 @@ import helmet from '@fastify/helmet';
 import { clerkPlugin, getAuth } from '@clerk/fastify';
 import path from 'path';
 import { db, occasions, outfitTemplates, wardrobeItems, wardrobeItemImages, users, userProfiles } from '@dianis/database';
-import { eq, or, sql } from 'drizzle-orm';
+import { eq, or, sql, and } from 'drizzle-orm';
 import multipart from '@fastify/multipart';
 import { v2 as cloudinary } from 'cloudinary';
 import { analyzeWardrobeItem, generateOutfit, generateOutfitImage } from './ai.js';
@@ -17,7 +17,8 @@ const imageGeneratingLock = new Set<string>();
 
 
 const server = Fastify({
-  logger: true
+  logger: true,
+  bodyLimit: 15 * 1024 * 1024
 });
 
 server.register(cors, {
@@ -618,6 +619,22 @@ server.post('/api/favorites', async (request, reply) => {
       return reply.status(400).send({ success: false, error: 'Need templateId or generatedOutfitId' });
     }
 
+    let existing = null;
+    if (templateId) {
+      const [fav] = await db.select().from(outfitFavorites).where(and(eq(outfitFavorites.userId, userId), eq(outfitFavorites.templateOutfitId, templateId))).limit(1);
+      existing = fav;
+    } else if (generatedOutfitId) {
+      const [fav] = await db.select().from(outfitFavorites).where(and(eq(outfitFavorites.userId, userId), eq(outfitFavorites.generatedOutfitId, generatedOutfitId))).limit(1);
+      existing = fav;
+    }
+
+    if (existing) {
+      // Toggle off
+      await db.delete(outfitFavorites).where(eq(outfitFavorites.id, existing.id));
+      return { success: true, removed: true };
+    }
+
+    // Toggle on
     const [fav] = await db.insert(outfitFavorites).values({
       userId,
       templateOutfitId: templateId || null,
