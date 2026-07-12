@@ -40,11 +40,10 @@ Ultra high quality, professional studio lighting, sharp details.`;
 
   try {
     const res = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt,
+      model: 'dall-e-2',
+      prompt: prompt.substring(0, 950), // dall-e-2 has 1000 char limit
       n: 1,
       size: '1024x1024',
-      quality: 'standard',
     });
 
     const dalleUrl = res.data?.[0]?.url;

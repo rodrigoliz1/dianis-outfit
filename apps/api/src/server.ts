@@ -186,6 +186,21 @@ server.post('/api/wardrobe', async (request, reply) => {
   }
 });
 
+server.delete<{ Params: { id: string } }>('/api/wardrobe/:id', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+
+    const { id } = request.params;
+    await db.delete(wardrobeItems).where(eq(wardrobeItems.id, id));
+    // Cloudinary images could be deleted here, but for now we just delete the db record (cascade or orphaned)
+    return { success: true };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to delete item' });
+  }
+});
+
 /**
  * Silently generates outfit combinations for a user after they add a new wardrobe item.
  * Fetches all their items, asks AI for best combo, generates a DALL-E image, saves permanently.
@@ -232,27 +247,26 @@ async function generateWardrobeOutfits(userId: string, newItemId: string): Promi
           await db.insert(generatedOutfitItems).values(itemsToAttach);
         }
 
-        // Generate DALL-E image for the combo
+        // Generate DALL-E image for the combo ASYNCHRONOUSLY
         const selectedIds = itemsToAttach.map((i: any) => i.wardrobeItemId);
         const selectedItems = allItems.filter(i => selectedIds.includes(i.id));
         const colorPalette = [...new Set(selectedItems.map(i => i.primaryColor).filter(Boolean))];
 
-        const imageUrl = await generateOutfitImage(
+        // Fire and forget image generation so it doesn't block UI
+        generateOutfitImage(
           savedOutfit.name || `Outfit ${occasion}`,
           savedOutfit.description || savedOutfit.name || '',
           colorPalette as string[],
           [occasion],
           [occasion]
-        );
+        ).then(async (imageUrl) => {
+          if (imageUrl) {
+            await db.update(generatedOutfits)
+              .set({ imageUrl } as any)
+              .where(eq(generatedOutfits.id, savedOutfit.id));
+          }
+        }).catch(e => server.log.error(e, 'Async wardrobe image generation failed'));
 
-        if (imageUrl) {
-          await db.update(generatedOutfits)
-            .set({ imageUrl } as any)
-            .where(eq(generatedOutfits.id, savedOutfit.id));
-        }
-
-        // Wait 15s between DALL-E calls to respect rate limits
-        await new Promise(r => setTimeout(r, 15000));
       } catch (e) {
         server.log.error(e, `Failed to generate outfit for occasion: ${occasion}`);
       }
@@ -609,7 +623,26 @@ server.get('/api/favorites', async (request, reply) => {
     if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
 
     const favs = await db.select().from(outfitFavorites).where(eq(outfitFavorites.userId, userId));
-    return { success: true, data: favs };
+    const fullFavs = await Promise.all(favs.map(async (f) => {
+      let outfit = null;
+      if (f.templateOutfitId) {
+        const [t] = await db.select().from(outfitTemplates).where(eq(outfitTemplates.id, f.templateOutfitId));
+        if (t) outfit = { ...t, source: 'catalog' };
+      } else if (f.generatedOutfitId) {
+        const [g] = await db.select().from(generatedOutfits).where(eq(generatedOutfits.id, f.generatedOutfitId));
+        if (g) {
+          const items = await db.select().from(generatedOutfitItems).where(eq(generatedOutfitItems.generatedOutfitId, g.id));
+          const withImages = await Promise.all(items.map(async (item) => {
+             const [wi] = await db.select().from(wardrobeItems).where(eq(wardrobeItems.id, item.wardrobeItemId));
+             const imgs = await db.select().from(wardrobeItemImages).where(eq(wardrobeItemImages.wardrobeItemId, item.wardrobeItemId)).limit(1);
+             return { id: item.wardrobeItemId, name: wi?.name || '', category: wi?.category || '', imageUrl: imgs[0]?.secureUrl || null };
+          }));
+          outfit = { ...g, source: 'wardrobe', collageItems: withImages };
+        }
+      }
+      return { ...f, outfit };
+    }));
+    return { success: true, data: fullFavs.filter(f => f.outfit) };
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to fetch favorites' });

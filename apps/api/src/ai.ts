@@ -114,11 +114,10 @@ Fashion magazine quality, professional studio lighting, elegant composition. No 
 The outfit pieces should be visually harmonious and match the described aesthetic perfectly.`;
 
     const imageResponse = await openai.images.generate({
-      model: "dall-e-3",
-      prompt,
+      model: "dall-e-2",
+      prompt: prompt.substring(0, 950), // limit for dall-e-2
       n: 1,
       size: "1024x1024",
-      quality: "standard",
     });
 
     const dalleUrl = imageResponse.data?.[0]?.url ?? null;
