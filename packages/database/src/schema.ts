@@ -144,6 +144,7 @@ export const outfitTemplates = pgTable('outfit_templates', {
   hairSuggestion: text('hair_suggestion'),
   makeupSuggestion: text('makeup_suggestion'),
   stylingTips: text('styling_tips'),
+  gender: text('gender').default('femenino').notNull(), // 'masculino', 'femenino'
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

@@ -50,14 +50,18 @@ server.get('/health', async (request, reply) => {
 
 server.get('/api/catalog', async (request, reply) => {
   try {
-    const { occasion } = request.query as { occasion?: string };
-    const catalog = await db.select().from(outfitTemplates);
+    const { occasion, gender } = request.query as { occasion?: string; gender?: string };
+    const catalog = await db.select().from(outfitTemplates).where(eq(outfitTemplates.isActive, true));
     
     let filtered = catalog;
     if (occasion) {
-      filtered = catalog.filter(outfit => 
+      filtered = filtered.filter(outfit => 
         outfit.occasionTags && outfit.occasionTags.includes(occasion)
       );
+    }
+    // Filter by gender if provided
+    if (gender) {
+      filtered = filtered.filter(outfit => outfit.gender === gender);
     }
     
     return { success: true, data: filtered };
@@ -193,8 +197,27 @@ server.delete<{ Params: { id: string } }>('/api/wardrobe/:id', async (request, r
     if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
 
     const { id } = request.params;
+
+    // First, remove any generated outfits that reference this wardrobe item
+    // We need to find generated_outfit_items rows referencing this item, then delete their parent outfits too
+    const relatedOutfitItems = await db.select().from(generatedOutfitItems).where(eq(generatedOutfitItems.wardrobeItemId, id));
+    const relatedOutfitIds = [...new Set(relatedOutfitItems.map(r => r.generatedOutfitId).filter(Boolean))] as string[];
+    
+    // Delete the outfit items first
+    await db.delete(generatedOutfitItems).where(eq(generatedOutfitItems.wardrobeItemId, id));
+    
+    // Delete associated generated outfits (that are now empty)
+    if (relatedOutfitIds.length > 0) {
+      for (const outfitId of relatedOutfitIds) {
+        await db.delete(generatedOutfits).where(eq(generatedOutfits.id, outfitId));
+      }
+    }
+
+    // Delete wardrobe item images
+    await db.delete(wardrobeItemImages).where(eq(wardrobeItemImages.wardrobeItemId, id));
+    
+    // Now delete the wardrobe item itself
     await db.delete(wardrobeItems).where(eq(wardrobeItems.id, id));
-    // Cloudinary images could be deleted here, but for now we just delete the db record (cascade or orphaned)
     return { success: true };
   } catch (error) {
     server.log.error(error);
@@ -756,16 +779,21 @@ server.put('/api/profile', async (request, reply) => {
       finalAvatarUrl = uploadRes.secure_url;
     }
 
-    const [updatedProfile] = await db.insert(userProfiles).values({
-      userId: user.id,
-      gender: body.gender,
-      avatarUrl: finalAvatarUrl
-    }).onConflictDoUpdate({
+    const insertValues: { userId: string; gender?: string; avatarUrl?: string } = { userId: user.id };
+    if (body.gender !== undefined) insertValues.gender = body.gender;
+    if (finalAvatarUrl !== undefined) insertValues.avatarUrl = finalAvatarUrl;
+
+    const setValues: { gender?: string; avatarUrl?: string } = {};
+    if (body.gender !== undefined) setValues.gender = body.gender;
+    if (finalAvatarUrl !== undefined) setValues.avatarUrl = finalAvatarUrl;
+
+    if (Object.keys(setValues).length === 0) {
+      return { success: true, data: null };
+    }
+
+    const [updatedProfile] = await db.insert(userProfiles).values(insertValues).onConflictDoUpdate({
       target: userProfiles.userId,
-      set: { 
-        gender: body.gender !== undefined ? body.gender : sql`gender`,
-        avatarUrl: finalAvatarUrl !== undefined ? finalAvatarUrl : sql`avatar_url`
-      }
+      set: setValues
     }).returning();
 
     return { success: true, data: updatedProfile };

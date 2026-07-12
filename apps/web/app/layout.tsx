@@ -9,7 +9,6 @@ const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfa
 export const metadata: Metadata = {
   title: "Dianis Outfit",
   description: "Tu asistente personal de estilo",
-  manifest: "/manifest.json",
 };
 
 export const viewport: Viewport = {

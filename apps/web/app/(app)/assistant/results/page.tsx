@@ -139,8 +139,8 @@ function ResultsContent() {
   useEffect(() => {
     const fetchResults = async () => {
       try {
+        const token = await getToken();
         if (mode === "wardrobe") {
-          const token = await getToken();
           const res = await fetch("/api/outfits/generate", {
             method: "POST",
             headers: {
@@ -156,10 +156,25 @@ function ResultsContent() {
             alert("No tienes suficientes prendas en el armario para generar un outfit.");
           }
         } else {
-          const url = occasion 
-            ? `/api/catalog?occasion=${occasion}`
-            : "/api/catalog";
-            
+          // Fetch user profile to get gender for filtering
+          let gender = "";
+          try {
+            if (token) {
+              const profileRes = await fetch("/api/profile", {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              const profileData = await profileRes.json();
+              if (profileData.success && profileData.data?.gender) {
+                gender = profileData.data.gender;
+              }
+            }
+          } catch { /* ignore profile fetch errors */ }
+
+          const params = new URLSearchParams();
+          if (occasion) params.set("occasion", occasion);
+          if (gender) params.set("gender", gender);
+          
+          const url = `/api/catalog?${params.toString()}`;
           const res = await fetch(url);
           const data = await res.json();
           if (data.success) {
