@@ -114,7 +114,7 @@ The outfit pieces should be visually harmonious and match the described aestheti
       style: "natural",
     });
 
-    const dalleUrl = imageResponse.data[0]?.url;
+    const dalleUrl = imageResponse.data?.[0]?.url ?? null;
     if (!dalleUrl) throw new Error("No image URL from DALL-E");
 
     // Upload to Cloudinary for permanent storage

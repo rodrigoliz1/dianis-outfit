@@ -40,9 +40,10 @@ function WardrobeCollage({ items }: { items: CollageItem[] }) {
   }
 
   if (count === 1) {
+    const first = withImages[0]!;
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={withImages[0].imageUrl!} alt={withImages[0].name} className="absolute inset-0 w-full h-full object-cover" />
+      <img src={first.imageUrl!} alt={first.name} className="absolute inset-0 w-full h-full object-cover" />
     );
   }
 

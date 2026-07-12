@@ -278,24 +278,24 @@ server.get('/api/outfits/:id', async (request, reply) => {
     // First check by slug (always safe)
     const bySlug = await db.select().from(outfitTemplates).where(eq(outfitTemplates.slug, id)).limit(1);
     if (bySlug.length > 0) {
-      const outfit = bySlug[0];
+      const outfit = bySlug[0]!;
       // Auto-generate image if missing — lock prevents duplicate DALL-E calls
       if (!outfit.imageUrl && !imageGeneratingLock.has(outfit.id)) {
         imageGeneratingLock.add(outfit.id);
-        generateOutfitImage(
-          outfit.name,
-          outfit.description || outfit.name,
-          outfit.colorPalette || [],
-          outfit.styleTags || [],
-          outfit.occasionTags || []
-        ).then(async (imageUrl) => {
-          if (imageUrl) {
-            await db.update(outfitTemplates)
-              .set({ imageUrl })
-              .where(eq(outfitTemplates.id, outfit.id));
-          }
-        }).catch((e) => server.log.error(e, 'Failed to generate outfit image'))
-          .finally(() => imageGeneratingLock.delete(outfit.id));
+        const outfitId = outfit.id;
+        const outfitName = outfit.name;
+        const outfitDesc = outfit.description || outfit.name;
+        const outfitColors = outfit.colorPalette || [];
+        const outfitStyles = outfit.styleTags || [];
+        const outfitOccasions = outfit.occasionTags || [];
+        generateOutfitImage(outfitName, outfitDesc, outfitColors, outfitStyles, outfitOccasions)
+          .then(async (imageUrl) => {
+            if (imageUrl) {
+              await db.update(outfitTemplates).set({ imageUrl }).where(eq(outfitTemplates.id, outfitId));
+            }
+          })
+          .catch((e) => server.log.error(e, 'Failed to generate outfit image'))
+          .finally(() => imageGeneratingLock.delete(outfitId));
       }
       return { success: true, data: outfit };
     }
@@ -304,23 +304,23 @@ server.get('/api/outfits/:id', async (request, reply) => {
     if (isUuid) {
       const byId = await db.select().from(outfitTemplates).where(eq(outfitTemplates.id, id)).limit(1);
       if (byId.length > 0) {
-        const outfit = byId[0];
+        const outfit = byId[0]!;
         if (!outfit.imageUrl && !imageGeneratingLock.has(outfit.id)) {
           imageGeneratingLock.add(outfit.id);
-          generateOutfitImage(
-            outfit.name,
-            outfit.description || outfit.name,
-            outfit.colorPalette || [],
-            outfit.styleTags || [],
-            outfit.occasionTags || []
-          ).then(async (imageUrl) => {
-            if (imageUrl) {
-              await db.update(outfitTemplates)
-                .set({ imageUrl })
-                .where(eq(outfitTemplates.id, outfit.id));
-            }
-          }).catch((e) => server.log.error(e, 'Failed to generate outfit image'))
-            .finally(() => imageGeneratingLock.delete(outfit.id));
+          const outfitId = outfit.id;
+          const outfitName = outfit.name;
+          const outfitDesc = outfit.description || outfit.name;
+          const outfitColors = outfit.colorPalette || [];
+          const outfitStyles = outfit.styleTags || [];
+          const outfitOccasions = outfit.occasionTags || [];
+          generateOutfitImage(outfitName, outfitDesc, outfitColors, outfitStyles, outfitOccasions)
+            .then(async (imageUrl) => {
+              if (imageUrl) {
+                await db.update(outfitTemplates).set({ imageUrl }).where(eq(outfitTemplates.id, outfitId));
+              }
+            })
+            .catch((e) => server.log.error(e, 'Failed to generate outfit image'))
+            .finally(() => imageGeneratingLock.delete(outfitId));
         }
         return { success: true, data: outfit };
       }
