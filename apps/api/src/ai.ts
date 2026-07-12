@@ -123,28 +123,36 @@ The photo should show the full outfit displayed in a flatlay or on a mannequin a
 Fashion magazine quality, professional studio lighting, elegant composition. No faces, no people — only the clothing arranged beautifully.`;
     }
 
-    // DALL-E API is disabled due to missing credits (Tier 0). Returning static image.
-    // Uncomment the below code to re-enable DALL-E generation.
-    /*
-    const imageResponse = await openai.images.generate({
-      model: "dall-e-2",
-      prompt: prompt.substring(0, 950), // limit for dall-e-2
-      n: 1,
-      size: "1024x1024",
-    });
+    if (process.env.FAL_KEY) {
+      const falRes = await fetch("https://fal.run/fal-ai/flux/schnell", {
+        method: "POST",
+        headers: {
+          "Authorization": `Key ${process.env.FAL_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          prompt: prompt.substring(0, 950),
+          image_size: "square_hd",
+          num_inference_steps: 4
+        })
+      });
 
-    const dalleUrl = imageResponse.data?.[0]?.url ?? null;
-    if (!dalleUrl) throw new Error("No image URL from DALL-E");
+      if (falRes.ok) {
+        const falData = await falRes.json();
+        const imageUrl = falData.images?.[0]?.url;
+        if (imageUrl) {
+          const uploadResult = await cloudinary.uploader.upload(imageUrl, {
+            folder: "dianis-outfit/outfits",
+            transformation: [{ quality: "auto:good", fetch_format: "auto" }],
+          });
+          return uploadResult.secure_url;
+        }
+      } else {
+        console.error("Fal.ai generation failed:", await falRes.text());
+      }
+    }
 
-    // Upload to Cloudinary for permanent storage
-    const uploadResult = await cloudinary.uploader.upload(dalleUrl, {
-      folder: "dianis-outfit/outfits",
-      transformation: [{ quality: "auto:good", fetch_format: "auto" }],
-    });
-
-    return uploadResult.secure_url;
-    */
-
+    // Fallback if FAL is not configured or fails
     return "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=800&auto=format&fit=crop";
   } catch (error) {
     console.error("Error generating outfit image with DALL-E:", error);

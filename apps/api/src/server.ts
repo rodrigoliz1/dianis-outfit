@@ -202,6 +202,33 @@ server.delete<{ Params: { id: string } }>('/api/wardrobe/:id', async (request, r
   }
 });
 
+server.put<{ Params: { id: string }, Body: { name?: string, category?: string, subcategory?: string, primaryColor?: string } }>('/api/wardrobe/:id', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+
+    const { id } = request.params;
+    const { name, category, subcategory, primaryColor } = request.body;
+    
+    // Check ownership
+    const [existing] = await db.select().from(wardrobeItems).where(eq(wardrobeItems.id, id)).limit(1);
+    if (!existing || existing.userId !== userId) {
+      return reply.status(403).send({ success: false, error: 'Forbidden' });
+    }
+
+    const [updated] = await db.update(wardrobeItems).set({
+      name: name !== undefined ? name : sql`name`,
+      category: category !== undefined ? category : sql`category`,
+      subcategory: subcategory !== undefined ? subcategory : sql`subcategory`,
+      primaryColor: primaryColor !== undefined ? primaryColor : sql`primary_color`,
+    }).where(eq(wardrobeItems.id, id)).returning();
+
+    return { success: true, data: updated };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to update item' });
+  }
+});
 /**
  * Silently generates outfit combinations for a user after they add a new wardrobe item.
  * Fetches all their items, asks AI for best combo, generates a DALL-E image, saves permanently.
