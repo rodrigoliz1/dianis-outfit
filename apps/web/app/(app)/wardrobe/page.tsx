@@ -11,9 +11,11 @@ import { useAuth } from "@clerk/nextjs";
 
 type WardrobeItem = {
   id: string;
-  originalImageUrl: string;
+  imageUrl: string | null;
+  name: string;
   category: string;
-  colorFamily: string;
+  primaryColor: string | null;
+  subcategory: string | null;
 };
 
 export default function WardrobePage() {
@@ -83,11 +85,18 @@ export default function WardrobePage() {
               <Card className="overflow-hidden h-full">
                 <div className="aspect-square bg-warm-white relative">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={item.originalImageUrl} alt={item.category} className="w-full h-full object-cover" />
+                  {item.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.imageUrl} alt={item.name || item.category} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-warm-white">
+                      <Shirt className="h-10 w-10 text-border" />
+                    </div>
+                  )}
                 </div>
                 <CardContent className="p-3">
-                  <p className="text-sm font-medium capitalize truncate">{item.category}</p>
-                  <p className="text-xs text-soft-gray capitalize">{item.colorFamily}</p>
+                  <p className="text-sm font-medium capitalize truncate">{item.name || item.subcategory || item.category}</p>
+                  <p className="text-xs text-soft-gray capitalize">{item.primaryColor}</p>
                 </CardContent>
               </Card>
             </motion.div>

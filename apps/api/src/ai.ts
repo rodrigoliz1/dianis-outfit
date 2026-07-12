@@ -11,13 +11,31 @@ export async function analyzeWardrobeItem(imageUrl: string) {
       messages: [
         {
           role: "system",
-          content: "Eres un estilista experto y curador de moda de alta costura. Tu tarea es analizar minuciosamente la prenda en la imagen y clasificarla con precisión absoluta. Ignora el fondo y enfócate en la prenda principal. Devuelve ÚNICAMENTE un objeto JSON con las siguientes claves estrictas:\n1. 'category' (Solo una: tops, bottoms, dresses, outerwear, shoes, accessories).\n2. 'colorFamily' (El color dominante, ej: azul marino, terracota, beige, negro).\n3. 'weatherTags' (Arreglo con opciones según tela/corte: caluroso, templado, frio, lluvioso).\n4. 'styleTags' (Arreglo de 2-4 strings, ej: casual, elegante, boho, athleisure, minimalista, urbano, romántico, profesional, vintage)."
+          content: `Eres un estilista experto en moda latinoamericana y alta costura con 20 años de experiencia. 
+Analiza DETALLADAMENTE la prenda en la imagen. Ignora el fondo, modelos y accesorios secundarios. Enfócate en la prenda principal.
+
+Devuelve ÚNICAMENTE un objeto JSON válido con estas claves exactas:
+- "category": UNA de estas categorías exactas: "tops", "bottoms", "dresses", "outerwear", "shoes", "bags", "accessories"
+- "subcategory": Subcategoría específica (ej: "blusa", "camiseta", "suéter", "jeans", "pantalón formal", "falda midi", "vestido casual", "vestido de noche", "chaqueta", "abrigo", "tenis", "tacones", "botas", "bolso tote", "cartera", "cinturón", "collar")
+- "name": Nombre descriptivo y elegante de la prenda en español (ej: "Blusa de seda beige", "Jeans de tiro alto azul marino")
+- "brand": Marca visible en la prenda o etiqueta. Si no se ve ninguna marca, pon null
+- "colorFamily": Color dominante principal en español, muy específico (ej: "azul marino", "rosa palo", "beige tostado", "negro mate", "blanco marfil", "verde oliva", "terracota", "mostaza")
+- "primaryColorHex": Código hexadecimal aproximado del color dominante (ej: "#2C3E50")
+- "pattern": Tipo de estampado: "liso", "rayas", "cuadros", "floral", "animal print", "geométrico", "tie-dye", "bordado" o null si es liso
+- "materials": Array con materiales identificados (ej: ["algodón", "poliéster"]) - dedúcelo de la textura visual
+- "fit": Silueta del corte: "ajustado", "regular", "holgado", "oversized", "bodycon", "A-line", "recto"
+- "formalityScore": Número del 1 al 5 (1=muy casual, 5=muy formal)
+- "weatherTags": Array con opciones aplicables: "caluroso", "templado", "frío", "lluvioso"
+- "styleTags": Array de 2 a 5 estilos: "casual", "formal", "elegante", "boho", "minimalista", "urbano", "romántico", "athleisure", "vintage", "preppy", "chic", "profesional", "festivo"
+- "seasons": Array con temporadas aplicables: "primavera", "verano", "otoño", "invierno"
+
+Sé muy específico y preciso. Si algo no es visible con certeza, proporciona tu mejor estimación basada en lo visible.`
         },
         {
           role: "user",
           content: [
-            { type: "text", text: "Analiza esta prenda." },
-            { type: "image_url", image_url: { url: imageUrl } },
+            { type: "text", text: "Analiza esta prenda con el máximo detalle posible." },
+            { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
           ],
         },
       ],
@@ -30,18 +48,35 @@ export async function analyzeWardrobeItem(imageUrl: string) {
     const analysis = JSON.parse(content);
     return {
       category: analysis.category || "tops",
+      subcategory: analysis.subcategory || null,
+      name: analysis.name || "Mi Prenda",
+      brand: analysis.brand || null,
       colorFamily: analysis.colorFamily || "unknown",
+      primaryColorHex: analysis.primaryColorHex || null,
+      pattern: analysis.pattern || "liso",
+      materials: analysis.materials || [],
+      fit: analysis.fit || null,
+      formalityScore: analysis.formalityScore || 2,
       weatherTags: analysis.weatherTags || [],
       styleTags: analysis.styleTags || [],
+      seasons: analysis.seasons || [],
     };
   } catch (error) {
     console.error("Error analyzing image with AI:", error);
-    // Return fallback values in case of failure
     return {
       category: "tops",
+      subcategory: null,
+      name: "Mi Prenda",
+      brand: null,
       colorFamily: "unknown",
+      primaryColorHex: null,
+      pattern: "liso",
+      materials: [],
+      fit: null,
+      formalityScore: 2,
       weatherTags: [],
       styleTags: [],
+      seasons: [],
     };
   }
 }

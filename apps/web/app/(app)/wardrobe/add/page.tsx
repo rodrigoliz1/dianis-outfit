@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Upload, Loader2, Camera, Check } from "lucide-react";
+import { ArrowLeft, Upload, Loader2, Camera, Check, Tag, Palette, Thermometer, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,9 +20,11 @@ export default function AddWardrobeItemPage() {
   
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [formData, setFormData] = useState({
-    name: "Mi Prenda",
+    name: "",
     category: "",
+    subcategory: "",
     colorFamily: "",
+    brand: "",
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,9 +58,11 @@ export default function AddWardrobeItemPage() {
       if (data.success) {
         setAnalysisData(data.data);
         setFormData({
-          name: "Mi Prenda",
-          category: data.data.analysis.category,
-          colorFamily: data.data.analysis.colorFamily,
+          name: data.data.analysis.name || "Mi Prenda",
+          category: data.data.analysis.category || "",
+          subcategory: data.data.analysis.subcategory || "",
+          colorFamily: data.data.analysis.colorFamily || "",
+          brand: data.data.analysis.brand || "",
         });
         setStep("confirm");
       } else {
@@ -82,9 +86,14 @@ export default function AddWardrobeItemPage() {
         imageUrl: analysisData.imageUrl,
         name: formData.name,
         category: formData.category,
+        subcategory: formData.subcategory,
         colorFamily: formData.colorFamily,
-        weatherTags: analysisData.analysis.weatherTags,
-        styleTags: analysisData.analysis.styleTags,
+        brand: formData.brand,
+        weatherTags: analysisData.analysis.weatherTags || [],
+        styleTags: analysisData.analysis.styleTags || [],
+        seasons: analysisData.analysis.seasons || [],
+        pattern: analysisData.analysis.pattern || null,
+        formalityScore: analysisData.analysis.formalityScore || 2,
       };
 
       const res = await fetch("/api/wardrobe", {
@@ -177,11 +186,14 @@ export default function AddWardrobeItemPage() {
                       Analizando con IA...
                     </>
                   ) : (
-                    "Analizar Prenda"
+                    <>
+                      <Sparkles className="h-5 w-5 mr-2" />
+                      Analizar Prenda con IA
+                    </>
                   )}
                 </Button>
                 <p className="text-xs text-center text-soft-gray mt-4">
-                  Nuestra IA analizará automáticamente el color y tipo de prenda.
+                  Nuestra IA detectará el tipo, color, marca, materiales y más.
                 </p>
               </div>
             </div>
@@ -193,39 +205,107 @@ export default function AddWardrobeItemPage() {
                 <div className="w-12 h-12 rounded-full bg-[#496B52]/10 text-[#496B52] mx-auto flex items-center justify-center">
                   <Check className="h-6 w-6" />
                 </div>
-                <h2 className="font-serif text-xl text-charcoal">Esto es lo que encontré</h2>
-                <p className="text-sm text-soft-gray">¿Está correcto? Modifica lo que necesites.</p>
+                <h2 className="font-serif text-xl text-charcoal">Esto es lo que detecté</h2>
+                <p className="text-sm text-soft-gray">Revisa y corrige los datos si es necesario.</p>
               </div>
 
               <div className="flex justify-center mb-6">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={analysisData.imageUrl} alt="Analysis" className="h-32 object-contain rounded-md shadow-sm border border-border" />
+                <img src={analysisData.imageUrl} alt="Analysis" className="h-40 object-contain rounded-md shadow-sm border border-border" />
               </div>
+
+              {/* AI detected tags - read only */}
+              {analysisData.analysis && (
+                <div className="bg-ivory rounded-xl p-4 space-y-3 mb-2">
+                  <p className="text-xs font-medium text-soft-gray uppercase tracking-wider">Detectado por IA</p>
+                  {analysisData.analysis.styleTags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-soft-gold mt-0.5" />
+                      {analysisData.analysis.styleTags.map((tag: string, i: number) => (
+                        <span key={i} className="text-xs bg-white border border-border px-2 py-0.5 rounded-full capitalize">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                  {analysisData.analysis.weatherTags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      <Thermometer className="h-3.5 w-3.5 text-soft-gold mt-0.5" />
+                      {analysisData.analysis.weatherTags.map((tag: string, i: number) => (
+                        <span key={i} className="text-xs bg-white border border-border px-2 py-0.5 rounded-full capitalize">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                  {analysisData.analysis.primaryColorHex && (
+                    <div className="flex items-center gap-2">
+                      <Palette className="h-3.5 w-3.5 text-soft-gold" />
+                      <div 
+                        className="w-5 h-5 rounded-full border border-border shadow-sm" 
+                        style={{ backgroundColor: analysisData.analysis.primaryColorHex }}
+                      />
+                      <span className="text-xs text-soft-gray">{analysisData.analysis.primaryColorHex}</span>
+                    </div>
+                  )}
+                  {analysisData.analysis.materials?.length > 0 && (
+                    <p className="text-xs text-soft-gray">
+                      <strong>Materiales:</strong> {analysisData.analysis.materials.join(", ")}
+                    </p>
+                  )}
+                  {analysisData.analysis.pattern && analysisData.analysis.pattern !== "liso" && (
+                    <p className="text-xs text-soft-gray">
+                      <strong>Estampado:</strong> {analysisData.analysis.pattern}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nombre</Label>
+                  <Label htmlFor="name">Nombre de la prenda</Label>
                   <Input 
                     id="name" 
                     value={formData.name} 
                     onChange={e => setFormData({...formData, name: e.target.value})} 
+                    placeholder="ej. Blusa de seda beige"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Categoría</Label>
-                  <Input 
-                    id="category" 
-                    value={formData.category} 
-                    onChange={e => setFormData({...formData, category: e.target.value})} 
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Categoría</Label>
+                    <Input 
+                      id="category" 
+                      value={formData.category} 
+                      onChange={e => setFormData({...formData, category: e.target.value})} 
+                      placeholder="tops"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="subcategory">Tipo</Label>
+                    <Input 
+                      id="subcategory" 
+                      value={formData.subcategory} 
+                      onChange={e => setFormData({...formData, subcategory: e.target.value})} 
+                      placeholder="blusa"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="color">Color Principal</Label>
-                  <Input 
-                    id="color" 
-                    value={formData.colorFamily} 
-                    onChange={e => setFormData({...formData, colorFamily: e.target.value})} 
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="color">Color principal</Label>
+                    <Input 
+                      id="color" 
+                      value={formData.colorFamily} 
+                      onChange={e => setFormData({...formData, colorFamily: e.target.value})} 
+                      placeholder="beige"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="brand">Marca (opcional)</Label>
+                    <Input 
+                      id="brand" 
+                      value={formData.brand} 
+                      onChange={e => setFormData({...formData, brand: e.target.value})} 
+                      placeholder="ej. Zara"
+                    />
+                  </div>
                 </div>
               </div>
 

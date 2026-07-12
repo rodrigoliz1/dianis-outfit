@@ -102,17 +102,16 @@ function ResultsContent() {
               transition={{ delay: index * 0.1 }}
             >
               <Card className="overflow-hidden border-border/50 shadow-sm">
-                <div className="aspect-[4/5] bg-warm-white relative flex items-center justify-center p-8">
+                <div className="aspect-[4/5] bg-ivory relative flex items-center justify-center overflow-hidden">
                   {outfit.imageUrl ? (
                     <img src={outfit.imageUrl} alt={outfit.name} className="absolute inset-0 w-full h-full object-cover" />
                   ) : (
-                    <img 
-                      src={`https://images.unsplash.com/photo-${['1515886657613-9f3515b0c78f', '1434389670869-bac0858e14d1', '1483985988355-763728e1935b', '1529139574466-a303027c1d8b', '1485230895905-ef08ba37e5c9'][outfit.name.length % 5]}?q=80&w=400&auto=format&fit=crop`} 
-                      alt="Fashion placeholder" 
-                      className="absolute inset-0 w-full h-full object-cover" 
-                    />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-champagne/20 to-ivory p-4 text-center">
+                      <Sparkles className="h-10 w-10 text-soft-gold/40 mb-3" />
+                      <span className="font-serif text-lg text-charcoal/50">{outfit.name}</span>
+                    </div>
                   )}
-                  <div className="absolute inset-0 bg-black/10"></div>
+                  <div className="absolute inset-0 bg-black/5" />
                   
                   <Button variant="ghost" size="icon" className="absolute top-4 right-4 bg-white/50 backdrop-blur hover:bg-white/80 rounded-full">
                     <Heart className="h-5 w-5 text-soft-gray hover:text-error transition-colors" />

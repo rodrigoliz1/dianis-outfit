@@ -136,7 +136,17 @@ server.post('/api/wardrobe', async (request, reply) => {
       styleTags: body.styleTags || []
     }).returning();
 
-    return { success: true, data: newItem };
+    // Save image record
+    if (newItem) {
+      await db.insert(wardrobeItemImages).values({
+        wardrobeItemId: newItem.id,
+        cloudinaryPublicId: body.imageUrl,
+        secureUrl: body.imageUrl,
+        isPrimary: true,
+      });
+    }
+
+    return { success: true, data: { ...newItem, imageUrl: body.imageUrl } };
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to save item' });
@@ -150,8 +160,18 @@ server.get('/api/wardrobe', async (request, reply) => {
       return reply.status(401).send({ success: false, error: 'Unauthorized' });
     }
 
+    // Get items with their primary image
     const items = await db.select().from(wardrobeItems).where(eq(wardrobeItems.userId, userId));
-    return { success: true, data: items };
+    
+    // Fetch primary images for all items
+    const itemsWithImages = await Promise.all(items.map(async (item) => {
+      const images = await db.select().from(wardrobeItemImages)
+        .where(eq(wardrobeItemImages.wardrobeItemId, item.id))
+        .limit(1);
+      return { ...item, imageUrl: images[0]?.secureUrl || null };
+    }));
+    
+    return { success: true, data: itemsWithImages };
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to fetch wardrobe' });
@@ -208,18 +228,27 @@ server.get('/api/outfits/:id', async (request, reply) => {
   try {
     const { id } = request.params as { id: string };
     
-    // Check if it's a template
-    const template = await db.select().from(outfitTemplates).where(or(eq(outfitTemplates.id, id), eq(outfitTemplates.slug, id))).limit(1);
-    
-    if (template.length > 0) {
-      return { success: true, data: template[0] };
+    // UUID pattern check
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    // First check by slug (always safe)
+    const bySlug = await db.select().from(outfitTemplates).where(eq(outfitTemplates.slug, id)).limit(1);
+    if (bySlug.length > 0) {
+      return { success: true, data: bySlug[0] };
     }
-    
-    // Check if it's generated
-    const generated = await db.select().from(generatedOutfits).where(eq(generatedOutfits.id, id)).limit(1);
-    
-    if (generated.length > 0) {
-      return { success: true, data: generated[0] };
+
+    // Check by UUID id only if it looks like a UUID
+    if (isUuid) {
+      const byId = await db.select().from(outfitTemplates).where(eq(outfitTemplates.id, id)).limit(1);
+      if (byId.length > 0) {
+        return { success: true, data: byId[0] };
+      }
+
+      // Check if it's a generated outfit
+      const generated = await db.select().from(generatedOutfits).where(eq(generatedOutfits.id, id)).limit(1);
+      if (generated.length > 0) {
+        return { success: true, data: generated[0] };
+      }
     }
     
     return reply.status(404).send({ success: false, error: 'Outfit not found' });
