@@ -10,6 +10,7 @@ import multipart from '@fastify/multipart';
 import { v2 as cloudinary } from 'cloudinary';
 import { analyzeWardrobeItem, generateOutfit, generateOutfitImage } from './ai.js';
 import { generatedOutfits, generatedOutfitItems, outfitFavorites, wearHistory, styleReactions } from '@dianis/database';
+import { initCronJobs, generateAndSaveNewOutfit } from './cron.js';
 
 // In-memory lock: tracks which outfit IDs are currently having an image generated
 // Prevents duplicate DALL-E calls when multiple users open the same imageless outfit simultaneously
@@ -933,8 +934,30 @@ server.post('/api/quiz', async (request, reply) => {
   }
 });
 
+// ─── Cron Job Trigger (Secret endpoint for testing/manual generation) ────
+server.post('/api/trigger-cron', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    // Optional: add admin check here based on user ID if desired
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+    
+    // Run asynchronously so we don't block the HTTP response
+    // (since image generation takes ~20 seconds)
+    generateAndSaveNewOutfit('femenino').catch(e => server.log.error(e));
+    generateAndSaveNewOutfit('masculino').catch(e => server.log.error(e));
+    
+    return { success: true, message: 'Cron job manually triggered. Generating outfits in background...' };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to trigger cron' });
+  }
+});
+
 const start = async () => {
   try {
+    // Initialize scheduled automated tasks
+    initCronJobs();
+
     const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
     await server.listen({ port, host: '0.0.0.0' });
     server.log.info(`Server running at http://localhost:${port}`);
