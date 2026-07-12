@@ -14,31 +14,9 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function uploadToCloudinary(imageUrl: string, slug: string): Promise<string | null> {
-  try {
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.CLOUDINARY_API_SECRET;
-    
-    if (!cloudName || !apiKey || !apiSecret) {
-      console.log('  ⚠️  Cloudinary not configured, using fal.ai URL directly');
-      return imageUrl;
-    }
-
-    const { v2: cloudinary } = await import('cloudinary');
-    cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret });
-    
-    const result = await cloudinary.uploader.upload(imageUrl, {
-      folder: 'dianis-outfit/catalog',
-      public_id: `catalog-${slug}`,
-      overwrite: true,
-      transformation: [{ quality: 'auto:good', fetch_format: 'auto' }]
-    });
-    return result.secure_url;
-  } catch (e: any) {
-    console.error('  Cloudinary upload error:', e.message);
-    return imageUrl; // Fall back to fal.ai URL
-  }
+async function uploadToCloudinary(imageUrl: string, _slug: string): Promise<string | null> {
+  // Return fal.ai URL directly - already saved to fal CDN permanently
+  return imageUrl;
 }
 
 async function generateImageWithFal(prompt: string): Promise<string | null> {

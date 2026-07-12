@@ -6,6 +6,8 @@ const nextConfig = {
       { protocol: 'https', hostname: 'res.cloudinary.com' },
       { protocol: 'https', hostname: 'fal.media' },
       { protocol: 'https', hostname: 'v3.fal.media' },
+      { protocol: 'https', hostname: 'v3b.fal.media' },
+      { protocol: 'https', hostname: '**.fal.media' },
     ],
   },
   async rewrites() {
