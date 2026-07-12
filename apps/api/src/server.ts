@@ -356,6 +356,7 @@ server.get('/api/admin/generate-catalog-images', async (request, reply) => {
     server.log.info(`Starting bulk image generation for ${missing.length} outfits`);
     let generated = 0;
     let failed = 0;
+    const errors: string[] = [];
 
     // Sequential to avoid DALL-E rate limits (1 image ~15s, limit: ~5/min)
     for (const outfit of missing) {
@@ -377,10 +378,18 @@ server.get('/api/admin/generate-catalog-images', async (request, reply) => {
           server.log.info(`Generated image for: ${outfit.slug}`);
         } else {
           failed++;
+          errors.push(`${outfit.slug}: generateOutfitImage returned null`);
         }
-      } catch (e) {
+      } catch (e: any) {
         failed++;
+        const msg = e?.message || String(e);
+        errors.push(`${outfit.slug}: ${msg}`);
         server.log.error(e, `Failed for outfit: ${outfit.slug}`);
+        // If first image fails, bail out early with diagnostics
+        if (generated === 0 && failed === 1) {
+          imageGeneratingLock.delete(outfit.id);
+          return { success: false, generated, failed, total: missing.length, firstError: msg };
+        }
       } finally {
         imageGeneratingLock.delete(outfit.id);
       }
@@ -388,10 +397,30 @@ server.get('/api/admin/generate-catalog-images', async (request, reply) => {
       await new Promise(r => setTimeout(r, 2000));
     }
 
-    return { success: true, generated, failed, total: missing.length };
-  } catch (error) {
+    return { success: generated > 0, generated, failed, total: missing.length, errors: errors.slice(0, 5) };
+  } catch (error: any) {
     server.log.error(error);
-    return reply.status(500).send({ success: false, error: 'Failed to generate images' });
+    return reply.status(500).send({ success: false, error: error?.message || 'Failed to generate images' });
+  }
+});
+
+// Admin diagnostic: test generating a single image (returns error detail if it fails)
+server.get('/api/admin/test-image-gen', async (request, reply) => {
+  const { secret } = request.query as { secret?: string };
+  if (secret !== (process.env.ADMIN_SECRET || 'dianis-admin-2024')) {
+    return reply.status(401).send({ success: false, error: 'Unauthorized' });
+  }
+  try {
+    const imageUrl = await generateOutfitImage(
+      'Campus Marfil',
+      'Outfit casual pulido, perfecto para universidad o café.',
+      ['blanco', 'azul denim', 'beige', 'dorado'],
+      ['casual pulido'],
+      ['universidad', 'cafe']
+    );
+    return { success: !!imageUrl, imageUrl };
+  } catch (e: any) {
+    return { success: false, error: e?.message, stack: e?.stack?.substring(0, 500) };
   }
 });
 

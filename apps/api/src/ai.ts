@@ -5,6 +5,14 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Configure Cloudinary (safe to call multiple times — idempotent)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+
 export async function analyzeWardrobeItem(imageUrl: string) {
   try {
     const response = await openai.chat.completions.create({
