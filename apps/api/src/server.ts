@@ -8,7 +8,7 @@ import { db, occasions, outfitTemplates, wardrobeItems, wardrobeItemImages } fro
 import { eq, or } from 'drizzle-orm';
 import multipart from '@fastify/multipart';
 import { v2 as cloudinary } from 'cloudinary';
-import { analyzeWardrobeItem, generateOutfit } from './ai.js';
+import { analyzeWardrobeItem, generateOutfit, generateOutfitImage } from './ai.js';
 import { generatedOutfits, generatedOutfitItems, outfitFavorites, wearHistory } from '@dianis/database';
 
 
@@ -87,8 +87,8 @@ server.post('/api/wardrobe/analyze', async (request, reply) => {
 
     const buffer = await data.toBuffer();
     
-    // Upload to Cloudinary
-    const cloudinaryResponse = await new Promise((resolve, reject) => {
+    // Upload original to Cloudinary
+    const originalUpload = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         { folder: 'dianis-outfit/wardrobe' },
         (error, result) => {
@@ -99,15 +99,34 @@ server.post('/api/wardrobe/analyze', async (request, reply) => {
       uploadStream.end(buffer);
     }) as any;
 
-    // Analyze with AI
-    let analysis = { category: 'tops', colorFamily: 'unknown', weatherTags: [], styleTags: [] };
+    // Build enhanced URL: background removal + clean white background + auto quality
+    // e_background_removal removes the background, b_white adds white bg
+    const publicId = originalUpload.public_id;
+    const enhancedUrl = cloudinary.url(publicId, {
+      transformation: [
+        { effect: 'background_removal' },
+        { background: 'white', gravity: 'center', width: 800, height: 800, crop: 'pad' },
+        { quality: 'auto:good', fetch_format: 'auto' }
+      ],
+      secure: true
+    });
+
+    // Analyze with AI using the original clean upload
+    let analysis: any = { category: 'tops', colorFamily: 'unknown', weatherTags: [], styleTags: [] };
     try {
-      analysis = await analyzeWardrobeItem(cloudinaryResponse.secure_url);
+      analysis = await analyzeWardrobeItem(originalUpload.secure_url);
     } catch (e) {
       server.log.error(e as Error, "AI Analysis failed");
     }
 
-    return { success: true, data: { imageUrl: cloudinaryResponse.secure_url, analysis } };
+    return { 
+      success: true, 
+      data: { 
+        imageUrl: enhancedUrl,           // enhanced version with white background
+        originalImageUrl: originalUpload.secure_url,  // original for AI fallback
+        analysis 
+      } 
+    };
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to analyze item' });
@@ -185,12 +204,19 @@ server.post('/api/outfits/generate', async (request, reply) => {
 
     const body = request.body as { occasion: string, style: string };
     
-    // Fetch user's wardrobe
-    const userItems = await db.select().from(wardrobeItems).where(eq(wardrobeItems.userId, userId));
+    // Fetch user's wardrobe with images
+    const userItemsRaw = await db.select().from(wardrobeItems).where(eq(wardrobeItems.userId, userId));
     
-    if (userItems.length < 2) {
+    if (userItemsRaw.length < 2) {
       return reply.status(400).send({ success: false, error: 'Not enough items in wardrobe to generate an outfit' });
     }
+
+    // Attach images to each item
+    const userItems = await Promise.all(userItemsRaw.map(async (item) => {
+      const imgs = await db.select().from(wardrobeItemImages)
+        .where(eq(wardrobeItemImages.wardrobeItemId, item.id)).limit(1);
+      return { ...item, imageUrl: imgs[0]?.secureUrl || null };
+    }));
 
     const aiResult = await generateOutfit(userItems, body.occasion, body.style);
     
@@ -201,23 +227,34 @@ server.post('/api/outfits/generate', async (request, reply) => {
     // Save generated outfit to DB
     const [newOutfit] = await db.insert(generatedOutfits).values({
       userId,
-      sourceMode: 'curated',
+      sourceMode: 'wardrobe',
       name: aiResult.name,
       description: aiResult.description,
       score: 100
     }).returning();
 
     // Attach items
-    const itemsToAttach = [];
-    if (newOutfit && aiResult.topId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.topId });
-    if (newOutfit && aiResult.bottomId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.bottomId });
-    if (newOutfit && aiResult.shoesId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.shoesId });
+    const itemsToAttach: any[] = [];
+    if (newOutfit && aiResult.topId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.topId, role: 'top' });
+    if (newOutfit && aiResult.bottomId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.bottomId, role: 'bottom' });
+    if (newOutfit && aiResult.shoesId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.shoesId, role: 'shoes' });
+    if (newOutfit && aiResult.outerwearId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.outerwearId, role: 'outerwear' });
+    if (newOutfit && aiResult.accessoryId) itemsToAttach.push({ generatedOutfitId: newOutfit.id, wardrobeItemId: aiResult.accessoryId, role: 'accessory' });
     
     if (itemsToAttach.length > 0) {
       await db.insert(generatedOutfitItems).values(itemsToAttach);
     }
 
-    return { success: true, data: { ...newOutfit, aiResult } };
+    // Build collage: return the actual wardrobe item images selected
+    const selectedIds = [aiResult.topId, aiResult.bottomId, aiResult.shoesId, aiResult.outerwearId, aiResult.accessoryId].filter(Boolean);
+    const collageItems = userItems.filter(i => selectedIds.includes(i.id)).map(i => ({
+      id: i.id,
+      name: i.name,
+      category: i.category,
+      imageUrl: i.imageUrl,
+    }));
+
+    return { success: true, data: { ...newOutfit, aiResult, collageItems } };
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Generation failed' });
@@ -234,14 +271,47 @@ server.get('/api/outfits/:id', async (request, reply) => {
     // First check by slug (always safe)
     const bySlug = await db.select().from(outfitTemplates).where(eq(outfitTemplates.slug, id)).limit(1);
     if (bySlug.length > 0) {
-      return { success: true, data: bySlug[0] };
+      const outfit = bySlug[0];
+      // Auto-generate image if missing (async, non-blocking — return immediately and generate in background)
+      if (!outfit.imageUrl) {
+        generateOutfitImage(
+          outfit.name,
+          outfit.description || outfit.name,
+          outfit.colorPalette || [],
+          outfit.styleTags || [],
+          outfit.occasionTags || []
+        ).then(async (imageUrl) => {
+          if (imageUrl) {
+            await db.update(outfitTemplates)
+              .set({ imageUrl })
+              .where(eq(outfitTemplates.id, outfit.id));
+          }
+        }).catch((e) => server.log.error(e, 'Failed to generate outfit image'));
+      }
+      return { success: true, data: outfit };
     }
 
     // Check by UUID id only if it looks like a UUID
     if (isUuid) {
       const byId = await db.select().from(outfitTemplates).where(eq(outfitTemplates.id, id)).limit(1);
       if (byId.length > 0) {
-        return { success: true, data: byId[0] };
+        const outfit = byId[0];
+        if (!outfit.imageUrl) {
+          generateOutfitImage(
+            outfit.name,
+            outfit.description || outfit.name,
+            outfit.colorPalette || [],
+            outfit.styleTags || [],
+            outfit.occasionTags || []
+          ).then(async (imageUrl) => {
+            if (imageUrl) {
+              await db.update(outfitTemplates)
+                .set({ imageUrl })
+                .where(eq(outfitTemplates.id, outfit.id));
+            }
+          }).catch((e) => server.log.error(e, 'Failed to generate outfit image'));
+        }
+        return { success: true, data: outfit };
       }
 
       // Check if it's a generated outfit
@@ -255,6 +325,36 @@ server.get('/api/outfits/:id', async (request, reply) => {
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to fetch outfit' });
+  }
+});
+
+// Endpoint to get all catalog outfits — also generates images for ones that don't have them
+server.get('/api/outfits/generate-images', async (request, reply) => {
+  try {
+    const outfits = await db.select().from(outfitTemplates).where(eq(outfitTemplates.isActive, true));
+    const missing = outfits.filter(o => !o.imageUrl);
+    
+    // Kick off generation for up to 3 at once (rate limit friendly)
+    const batch = missing.slice(0, 3);
+    await Promise.all(batch.map(async (outfit) => {
+      const imageUrl = await generateOutfitImage(
+        outfit.name,
+        outfit.description || outfit.name,
+        outfit.colorPalette || [],
+        outfit.styleTags || [],
+        outfit.occasionTags || []
+      );
+      if (imageUrl) {
+        await db.update(outfitTemplates)
+          .set({ imageUrl })
+          .where(eq(outfitTemplates.id, outfit.id));
+      }
+    }));
+
+    return { success: true, generated: batch.length, remaining: missing.length - batch.length };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to generate images' });
   }
 });
 

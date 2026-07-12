@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { v2 as cloudinary } from "cloudinary";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -81,6 +82,54 @@ Sé muy específico y preciso. Si algo no es visible con certeza, proporciona tu
   }
 }
 
+/**
+ * Generate a fashion outfit image using DALL-E 3.
+ * Uploads the result to Cloudinary and returns the secure URL.
+ */
+export async function generateOutfitImage(
+  outfitName: string,
+  description: string,
+  colorPalette: string[],
+  styleTags: string[],
+  occasionTags: string[]
+): Promise<string | null> {
+  try {
+    const colors = colorPalette?.slice(0, 4).join(", ") || "neutros elegantes";
+    const styles = styleTags?.slice(0, 3).join(", ") || "moderno";
+    const occasion = occasionTags?.slice(0, 2).join(" y ") || "ocasión especial";
+
+    const prompt = `High-quality fashion editorial photograph of a complete women's outfit styled for ${occasion}.
+Style: ${styles}. Color palette: ${colors}.
+Outfit concept: "${outfitName}" — ${description}
+The photo should show the full outfit displayed in a flatlay or on a mannequin against a clean white or soft cream background.
+Fashion magazine quality, professional studio lighting, elegant composition. No faces, no people — only the clothing arranged beautifully.
+The outfit pieces should be visually harmonious and match the described aesthetic perfectly.`;
+
+    const imageResponse = await openai.images.generate({
+      model: "dall-e-3",
+      prompt,
+      n: 1,
+      size: "1024x1024",
+      quality: "standard",
+      style: "natural",
+    });
+
+    const dalleUrl = imageResponse.data[0]?.url;
+    if (!dalleUrl) throw new Error("No image URL from DALL-E");
+
+    // Upload to Cloudinary for permanent storage
+    const uploadResult = await cloudinary.uploader.upload(dalleUrl, {
+      folder: "dianis-outfit/outfits",
+      transformation: [{ quality: "auto:good", fetch_format: "auto" }],
+    });
+
+    return uploadResult.secure_url;
+  } catch (error) {
+    console.error("Error generating outfit image with DALL-E:", error);
+    return null;
+  }
+}
+
 export async function generateOutfit(wardrobeItems: any[], occasion: string, style: string) {
   try {
     const response = await openai.chat.completions.create({
@@ -92,7 +141,7 @@ export async function generateOutfit(wardrobeItems: any[], occasion: string, sty
         },
         {
           role: "user",
-          content: `Ocasión: ${occasion}\nEstilo: ${style}\n\nPrendas disponibles:\n${JSON.stringify(wardrobeItems.map(i => ({ id: i.id, category: i.category, colorFamily: i.colorFamily, tags: i.occasionTags })), null, 2)}`
+          content: `Ocasión: ${occasion}\nEstilo: ${style}\n\nPrendas disponibles:\n${JSON.stringify(wardrobeItems.map(i => ({ id: i.id, name: i.name, category: i.category, subcategory: i.subcategory, colorFamily: i.primaryColor, tags: i.styleTags })), null, 2)}`
         }
       ],
       response_format: { type: "json_object" },
