@@ -51,36 +51,42 @@ export default function CatalogPage() {
       try {
         const token = isSignedIn ? await getToken() : null;
 
-        // Load user profile for gender
+        // Step 1: Load profile to get gender FIRST (before catalog)
+        let gender = "";
         if (token) {
-          const profileRes = await fetch("/api/profile", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const profileData = await profileRes.json();
-          if (profileData.success && profileData.data?.gender) {
-            setUserGender(profileData.data.gender);
-          }
+          try {
+            const profileRes = await fetch("/api/profile", {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const profileData = await profileRes.json();
+            if (profileData.success && profileData.data?.gender) {
+              gender = profileData.data.gender;
+              setUserGender(gender);
+            }
+          } catch { /* ignore */ }
         }
 
-        // Load existing favorites
+        // Step 2: Load favorites
         if (token) {
-          const favRes = await fetch("/api/favorites", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const favData = await favRes.json();
-          if (favData.success) {
-            const favIds = new Set<string>(
-              favData.data
-                .filter((f: any) => f.templateOutfitId)
-                .map((f: any) => f.templateOutfitId as string)
-            );
-            setFavorites(favIds);
-          }
+          try {
+            const favRes = await fetch("/api/favorites", {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const favData = await favRes.json();
+            if (favData.success) {
+              const favIds = new Set<string>(
+                favData.data
+                  .filter((f: any) => f.templateOutfitId)
+                  .map((f: any) => f.templateOutfitId as string)
+              );
+              setFavorites(favIds);
+            }
+          } catch { /* ignore */ }
         }
 
-        // Load catalog (gender-filtered)
+        // Step 3: Load catalog with gender already known
         const params = new URLSearchParams();
-        if (userGender) params.set("gender", userGender);
+        if (gender) params.set("gender", gender);
         const res = await fetch(`/api/catalog?${params.toString()}`);
         const data = await res.json();
         if (data.success) setOutfits(data.data);
@@ -89,7 +95,7 @@ export default function CatalogPage() {
       }
     };
     load();
-  }, [isSignedIn, getToken, userGender]);
+  }, [isSignedIn, getToken]); // No userGender dep — gender fetched inline
 
   const filteredOutfits =
     activeCategory === "all"

@@ -9,7 +9,7 @@ import { eq, or, sql, and } from 'drizzle-orm';
 import multipart from '@fastify/multipart';
 import { v2 as cloudinary } from 'cloudinary';
 import { analyzeWardrobeItem, generateOutfit, generateOutfitImage } from './ai.js';
-import { generatedOutfits, generatedOutfitItems, outfitFavorites, wearHistory } from '@dianis/database';
+import { generatedOutfits, generatedOutfitItems, outfitFavorites, wearHistory, styleReactions } from '@dianis/database';
 
 // In-memory lock: tracks which outfit IDs are currently having an image generated
 // Prevents duplicate DALL-E calls when multiple users open the same imageless outfit simultaneously
@@ -855,6 +855,81 @@ server.get('/api/history', async (request, reply) => {
   } catch (error) {
     server.log.error(error);
     return reply.status(500).send({ success: false, error: 'Failed to fetch history' });
+  }
+});
+
+// ─── Style Reactions (like/dislike) ───────────────────────────────
+server.post('/api/reactions', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+    const { templateId, reaction } = request.body as { templateId: string; reaction: 'like' | 'dislike' };
+    if (!templateId || !['like', 'dislike'].includes(reaction)) {
+      return reply.status(400).send({ success: false, error: 'Invalid payload' });
+    }
+    // Upsert reaction
+    const existing = await db.select().from(styleReactions)
+      .where(and(eq(styleReactions.userId, userId), eq(styleReactions.templateOutfitId, templateId)))
+      .limit(1);
+    if (existing.length > 0) {
+      if (existing[0]!.reaction === reaction) {
+        // Toggle off
+        await db.delete(styleReactions)
+          .where(and(eq(styleReactions.userId, userId), eq(styleReactions.templateOutfitId, templateId)));
+        return { success: true, removed: true };
+      }
+      await db.update(styleReactions)
+        .set({ reaction })
+        .where(and(eq(styleReactions.userId, userId), eq(styleReactions.templateOutfitId, templateId)));
+    } else {
+      await db.insert(styleReactions).values({ userId, templateOutfitId: templateId, reaction });
+    }
+    return { success: true, reaction };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to save reaction' });
+  }
+});
+
+server.get('/api/reactions', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+    const reactions = await db.select().from(styleReactions).where(eq(styleReactions.userId, userId));
+    return { success: true, data: reactions };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to fetch reactions' });
+  }
+});
+
+// ─── Style Quiz ────────────────────────────────────────────────────
+server.post('/api/quiz', async (request, reply) => {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) return reply.status(401).send({ success: false, error: 'Unauthorized' });
+    const { answers } = request.body as { answers: Record<string, string | string[]> };
+    // Build style profile from quiz answers
+    const styleProfile = {
+      ...answers,
+      completedAt: new Date().toISOString(),
+    };
+    // Find user record
+    const [userRec] = await db.select().from(users).where(eq(users.externalAuthId, userId)).limit(1);
+    if (!userRec) return reply.status(404).send({ success: false, error: 'User not found' });
+    // Upsert profile
+    const existing = await db.select().from(userProfiles).where(eq(userProfiles.userId, userRec.id)).limit(1);
+    if (existing.length > 0) {
+      await db.update(userProfiles)
+        .set({ styleProfile, quizCompleted: true } as any)
+        .where(eq(userProfiles.userId, userRec.id));
+    } else {
+      await db.insert(userProfiles).values({ userId: userRec.id, styleProfile, quizCompleted: true } as any);
+    }
+    return { success: true };
+  } catch (error) {
+    server.log.error(error);
+    return reply.status(500).send({ success: false, error: 'Failed to save quiz' });
   }
 });
 

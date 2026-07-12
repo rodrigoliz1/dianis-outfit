@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, Loader2, Heart, Sparkles, Plus, ImageIcon } from "lucide-react";
+import { ArrowLeft, Loader2, Heart, Sparkles, ThumbsUp, ThumbsDown, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@clerk/nextjs";
 
@@ -32,6 +32,8 @@ export default function OutfitDetailPage() {
   const [isFav, setIsFav] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageGenerating, setImageGenerating] = useState(false);
+  const [reaction, setReaction] = useState<"like" | "dislike" | null>(null);
+  const [reacting, setReacting] = useState(false);
 
   useEffect(() => {
     fetch(`/api/outfits/${slug}`)
@@ -74,7 +76,6 @@ export default function OutfitDetailPage() {
 
   const handleFavorite = async () => {
     if (!outfit) return;
-    if (isFav) { alert("Ya está en favoritos"); return; }
     setSavingFav(true);
     try {
       const token = await getToken();
@@ -88,15 +89,31 @@ export default function OutfitDetailPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setIsFav(true);
-      } else {
-        alert(`Error al guardar favorito: ${data.error}`);
+        setIsFav(!isFav); // Toggle
       }
     } catch (e) {
       console.error(e);
-      alert("Error al conectar con el servidor");
     } finally {
       setSavingFav(false);
+    }
+  };
+
+  const handleReact = async (r: "like" | "dislike") => {
+    if (!outfit || reacting) return;
+    setReacting(true);
+    const newReaction = reaction === r ? null : r; // toggle off if same
+    setReaction(newReaction);
+    try {
+      const token = await getToken();
+      if (token) {
+        await fetch("/api/reactions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: outfit.id, reaction: r }),
+        });
+      }
+    } catch { /* ignore */ } finally {
+      setReacting(false);
     }
   };
 
@@ -248,21 +265,34 @@ export default function OutfitDetailPage() {
       </div>
 
       {/* Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-border flex gap-3 z-50">
-        <Button 
-          variant="outline" 
-          className="flex-1 h-12"
-          onClick={() => alert("Función para modificar prenda próximamente")}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Modificar
-        </Button>
-        <Button 
-          variant="golden" 
-          className="flex-1 h-12"
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t border-border space-y-2.5 z-50">
+        {/* Like / Dislike */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleReact("dislike")}
+            disabled={reacting}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl border-2 transition-all text-sm font-medium ${
+              reaction === "dislike" ? "bg-red-50 border-red-400 text-red-500" : "border-border text-soft-gray hover:border-red-300"
+            }`}
+          >
+            <ThumbsDown className="h-4 w-4" /> No es mi estilo
+          </button>
+          <button
+            onClick={() => handleReact("like")}
+            disabled={reacting}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl border-2 transition-all text-sm font-medium ${
+              reaction === "like" ? "bg-emerald-50 border-emerald-400 text-emerald-600" : "border-border text-soft-gray hover:border-emerald-300"
+            }`}
+          >
+            <ThumbsUp className="h-4 w-4" /> Me encanta
+          </button>
+        </div>
+        <Button
+          variant="golden"
+          className="w-full h-12 text-base"
           onClick={handleUseOutfit}
         >
-          Usar este outfit
+          Usar este outfit hoy
         </Button>
       </div>
     </div>

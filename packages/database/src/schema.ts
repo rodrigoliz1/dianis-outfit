@@ -28,6 +28,8 @@ export const userProfiles = pgTable('user_profiles', {
   makeupSuggestionsEnabled: boolean('makeup_suggestions_enabled').default(false),
   hairSuggestionsEnabled: boolean('hair_suggestions_enabled').default(false),
   repeatFrequencyPreference: text('repeat_frequency_preference'),
+  styleProfile: jsonb('style_profile'), // Dynamic AI style profile from quiz + reactions
+  quizCompleted: boolean('quiz_completed').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -214,5 +216,13 @@ export const outfitRatings = pgTable('outfit_ratings', {
   wearHistoryId: uuid('wear_history_id').references(() => wearHistory.id, { onDelete: 'cascade' }).notNull(),
   rating: integer('rating').notNull(), // 1 to 5
   comment: text('comment'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const styleReactions = pgTable('style_reactions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(), // Clerk user ID
+  templateOutfitId: uuid('template_outfit_id').references(() => outfitTemplates.id, { onDelete: 'cascade' }),
+  reaction: text('reaction').notNull(), // 'like' | 'dislike'
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
