@@ -4,8 +4,8 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { clerkPlugin, getAuth } from '@clerk/fastify';
 import path from 'path';
-import { db, occasions, outfitTemplates, wardrobeItems, wardrobeItemImages } from '@dianis/database';
-import { eq, or } from 'drizzle-orm';
+import { db, occasions, outfitTemplates, wardrobeItems, wardrobeItemImages, users, userProfiles } from '@dianis/database';
+import { eq, or, sql } from 'drizzle-orm';
 import multipart from '@fastify/multipart';
 import { v2 as cloudinary } from 'cloudinary';
 import { analyzeWardrobeItem, generateOutfit, generateOutfitImage } from './ai.js';
@@ -647,11 +647,12 @@ server.get('/api/favorites', async (request, reply) => {
         if (g) {
           const items = await db.select().from(generatedOutfitItems).where(eq(generatedOutfitItems.generatedOutfitId, g.id));
           const withImages = await Promise.all(items.map(async (item) => {
+             if (!item.wardrobeItemId) return null;
              const [wi] = await db.select().from(wardrobeItems).where(eq(wardrobeItems.id, item.wardrobeItemId));
              const imgs = await db.select().from(wardrobeItemImages).where(eq(wardrobeItemImages.wardrobeItemId, item.wardrobeItemId)).limit(1);
              return { id: item.wardrobeItemId, name: wi?.name || '', category: wi?.category || '', imageUrl: imgs[0]?.secureUrl || null };
           }));
-          outfit = { ...g, source: 'wardrobe', collageItems: withImages };
+          outfit = { ...g, source: 'wardrobe', collageItems: withImages.filter(Boolean) };
         }
       }
       return { ...f, outfit };
@@ -673,6 +674,7 @@ server.get('/api/profile', async (request, reply) => {
       const [newUser] = await db.insert(users).values({ externalAuthId: userId, email: userId + '@placeholder.com' }).returning();
       user = newUser;
     }
+    if (!user) throw new Error("Failed to create user");
     
     let profile = await db.select().from(userProfiles).where(eq(userProfiles.userId, user.id)).limit(1).then(res => res[0]);
     if (!profile) {
@@ -699,6 +701,7 @@ server.put('/api/profile', async (request, reply) => {
       const [newUser] = await db.insert(users).values({ externalAuthId: userId, email: userId + '@placeholder.com' }).returning();
       user = newUser;
     }
+    if (!user) throw new Error("Failed to create user");
 
     let finalAvatarUrl = body.avatarUrl;
     if (body.avatarUrl && body.avatarUrl.startsWith('data:image')) {
