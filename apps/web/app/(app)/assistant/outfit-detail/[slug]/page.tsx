@@ -74,20 +74,27 @@ export default function OutfitDetailPage() {
 
   const handleFavorite = async () => {
     if (!outfit) return;
+    if (isFav) { alert("Ya está en favoritos"); return; }
     setSavingFav(true);
     try {
       const token = await getToken();
-      await fetch("/api/favorites", {
+      const res = await fetch("/api/favorites", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ templateId: outfit.id })
       });
-      setIsFav(true);
+      const data = await res.json();
+      if (data.success) {
+        setIsFav(true);
+      } else {
+        alert(`Error al guardar favorito: ${data.error}`);
+      }
     } catch (e) {
       console.error(e);
+      alert("Error al conectar con el servidor");
     } finally {
       setSavingFav(false);
     }
