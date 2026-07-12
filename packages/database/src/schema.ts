@@ -32,7 +32,7 @@ export const userProfiles = pgTable('user_profiles', {
 
 export const wardrobeItems = pgTable('wardrobe_items', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('user_id').notNull(), // Clerk user ID (e.g. user_XXXX)
   name: text('name').notNull(),
   category: text('category').notNull(),
   subcategory: text('subcategory'),
@@ -94,7 +94,7 @@ export const wardrobeItemImages = pgTable('wardrobe_item_images', {
 
 export const aiAnalysisJobs = pgTable('ai_analysis_jobs', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('user_id').notNull(), // Clerk user ID
   imageId: text('image_id'), // Public ID of the analyzed image
   provider: text('provider').default('openai').notNull(),
   model: text('model').notNull(),
@@ -163,7 +163,7 @@ export const outfitTemplatePieces = pgTable('outfit_template_pieces', {
 
 export const generatedOutfits = pgTable('generated_outfits', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('user_id').notNull(), // Clerk user ID
   sourceMode: text('source_mode').notNull(), // 'curated' or 'wardrobe'
   occasionId: uuid('occasion_id').references(() => occasions.id),
   category: text('category'), // From chosen style category
@@ -187,7 +187,7 @@ export const generatedOutfitItems = pgTable('generated_outfit_items', {
 
 export const outfitFavorites = pgTable('outfit_favorites', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('user_id').notNull(), // Clerk user ID
   templateOutfitId: uuid('template_outfit_id').references(() => outfitTemplates.id),
   generatedOutfitId: uuid('generated_outfit_id').references(() => generatedOutfits.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -195,7 +195,7 @@ export const outfitFavorites = pgTable('outfit_favorites', {
 
 export const wearHistory = pgTable('wear_history', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('user_id').notNull(), // Clerk user ID
   templateOutfitId: uuid('template_outfit_id').references(() => outfitTemplates.id),
   generatedOutfitId: uuid('generated_outfit_id').references(() => generatedOutfits.id),
   occasionId: uuid('occasion_id').references(() => occasions.id),
@@ -206,7 +206,7 @@ export const wearHistory = pgTable('wear_history', {
 
 export const outfitRatings = pgTable('outfit_ratings', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('user_id').notNull(), // Clerk user ID
   wearHistoryId: uuid('wear_history_id').references(() => wearHistory.id, { onDelete: 'cascade' }).notNull(),
   rating: integer('rating').notNull(), // 1 to 5
   comment: text('comment'),
